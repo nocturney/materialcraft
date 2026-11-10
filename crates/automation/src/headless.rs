@@ -26,7 +26,9 @@ pub struct Headless {
 fn read_file(fs: &Filesystem, path: &str) -> Result<Vec<u8>, AutomationError> {
     match fs {
         Filesystem::Denied => Err(bad("file access is not granted: start the server with --read-root <dir>")),
-        Filesystem::TrustedLocal => std::fs::read(path).map_err(|e| AutomationError::Io(format!("cannot read {path}: {e}"))),
+        Filesystem::TrustedLocal => {
+            materialcraft_formats::read_capped(path, materialcraft_formats::MAX_FILE).map_err(|e| AutomationError::Io(format!("cannot read {path}: {e}")))
+        }
         Filesystem::Workspace(w) => w.read(path),
     }
 }

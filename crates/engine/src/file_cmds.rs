@@ -249,7 +249,7 @@ pub fn open_file(s: &mut Session, path: &str) -> Result<()> {
         return open_bytes_linked(s, &bytes, Some(path.into()), &linked_files(path));
     }
 
-    let bytes = std::fs::read(path).map_err(|e| bad("file.open", format!("{path}: {e}")))?;
+    let bytes = materialcraft_formats::read_capped(path, materialcraft_formats::MAX_FILE).map_err(|e| bad("file.open", format!("{path}: {e}")))?;
     open_bytes_linked(s, &bytes, Some(path.to_string()), &linked_files(path))
 }
 
@@ -447,7 +447,7 @@ pub(crate) fn push_resource(pkg: &mut Package, file: &str, bytes: Vec<u8>, name:
 pub(crate) fn import_resource_file(s: &mut Session, p: &J, vector: bool) -> Result<J> {
     let path = strp(p, "path").ok_or_else(|| bad("file.importBitmap", "`path` is required"))?;
     validate_resource_extension(path, vector)?;
-    let bytes = std::fs::read(path).map_err(|e| bad("file.importBitmap", format!("{path}: {e}")))?;
+    let bytes = materialcraft_formats::read_capped(path, materialcraft_formats::MAX_FILE).map_err(|e| bad("file.importBitmap", format!("{path}: {e}")))?;
     let file = std::path::Path::new(path).file_name().and_then(|f| f.to_str()).unwrap_or("bitmap.png").to_string();
     let name = add_resource_into(s, &file, bytes, strp(p, "name"), strp(p, "folder").unwrap_or("Resources"))?;
     let def = if file.to_ascii_lowercase().ends_with(".svg") { "svg" } else { "bitmap" };

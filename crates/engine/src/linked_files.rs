@@ -72,7 +72,7 @@ pub(crate) fn load(package: &mut Package) -> Vec<String> {
             return Err("external file is unavailable in the browser".into());
             #[cfg(not(target_arch = "wasm32"))]
             {
-                let bytes = std::fs::read(&path).map_err(|error| error.to_string())?;
+                let bytes = materialcraft_formats::read_capped(&path, materialcraft_formats::MAX_FILE).map_err(|error| error.to_string())?;
                 let read = materialcraft_formats::sbs::read_sbs(&bytes, &path, &crate::file_cmds::linked_files(&path)).map_err(|error| error.to_string())?;
                 warnings.extend(read.warnings);
                 Ok(read.pkg)
