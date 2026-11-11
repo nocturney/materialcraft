@@ -291,6 +291,12 @@ pub fn shortcut_of(id: &str) -> Option<&'static str> {
 
 /// Draw menu bars with aligned labels and a separate gutter for checkmarks.
 pub fn menu_bar(app: &mut MaterialCraftApp, ui: &mut egui::Ui) {
+    menu_bar_with_locale(app, ui, crate::i18n::is_rtl(), tr);
+}
+
+/// Use the same rendering path for a deterministic RTL geometry test. The
+/// production entry point still derives both direction and text from i18n.
+fn menu_bar_with_locale(app: &mut MaterialCraftApp, ui: &mut egui::Ui, rtl: bool, localize: fn(&str) -> &str) {
     let tokens = Tokens::get(ui.ctx());
     egui::Panel::top("menu_bar").exact_size(24.0).frame(egui::Frame::NONE.fill(tokens.chrome).inner_margin(egui::Margin::symmetric(6, 0))).show(ui, |ui| {
         #[cfg(not(target_arch = "wasm32"))]
@@ -310,7 +316,7 @@ pub fn menu_bar(app: &mut MaterialCraftApp, ui: &mut egui::Ui) {
             // headings follow the locale's reading direction.
             let mut draw_menus = |ui: &mut egui::Ui| {
                 for top in TOP {
-                    ui.menu_button(tr(top), |ui| {
+                    ui.menu_button(localize(top), |ui| {
                         ui.set_min_width(220.0);
                         let mut current_submenu: Option<&str> = None;
                         let items: Vec<MenuItem> = CATALOG.iter().filter(|item| item.menu == top).copied().collect();
@@ -321,7 +327,7 @@ pub fn menu_bar(app: &mut MaterialCraftApp, ui: &mut egui::Ui) {
                                 }
 
                                 current_submenu = Some(submenu);
-                                ui.menu_button(menu_label(tr(submenu)), |ui| {
+                                ui.menu_button(menu_label(localize(submenu)), |ui| {
                                     for entry in items.iter().filter(|entry| entry.sub == Some(submenu)) {
                                         menu_item(app, &context, ui, entry);
                                     }
@@ -339,7 +345,7 @@ pub fn menu_bar(app: &mut MaterialCraftApp, ui: &mut egui::Ui) {
                     });
                 }
             };
-            if crate::i18n::is_rtl() {
+            if rtl {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     #[cfg(not(target_arch = "wasm32"))]
                     if let Some(layout) = window_layout.as_ref().filter(|layout| !layout.right.is_empty()) {
@@ -748,22 +754,29 @@ mod tests {
     #[test]
     fn hebrew_top_level_menus_are_right_to_left() {
         use egui_kittest::kittest::{By, Queryable};
-        let mut app = app();
-        app.ui.prefs.language = "he".to_owned();
-        crate::i18n::set_language("he");
-        // The geometry test runs in CI without OS Hebrew fonts; native glyph
-        // coverage is tested separately with the system-font fallback.
+        // A render that changes process-global i18n::CURRENT can race other
+        // unit tests constructing an English headless app in parallel. Use the
+        // actual Hebrew source table without mutating that global setting.
+        fn hebrew_text(key: &str) -> &str {
+            crate::i18n::LANGUAGES
+                .iter()
+                .find(|lang| lang.code == "he")
+                .and_then(|lang| lang.table.iter().find(|(source, _)| *source == key))
+                .map_or(key, |(_, translated)| *translated)
+        }
+        let app = app();
+        // Geometry is independent of installed OS fonts; glyph coverage has a
+        // separate native-font test. This still draws the real menu bar.
         let mut harness = egui_kittest::Harness::builder()
             .with_size(egui::vec2(900.0, 120.0))
             .allow_missing_glyphs()
-            .build_ui_state(|ui, app: &mut MaterialCraftApp| menu_bar(app, ui), app);
+            .build_ui_state(|ui, app: &mut MaterialCraftApp| menu_bar_with_locale(app, ui, true, hebrew_text), app);
         harness.run_steps(3);
         let query = |label| By::new().role(egui::accesskit::Role::Button).label(label);
         let file_x = harness.get(query("קובץ")).rect().center().x;
         let help_x = harness.get(query("עזרה")).rect().center().x;
         assert!(file_x > help_x, "Hebrew top menus did not reverse: File={file_x}, Help={help_x}");
         assert!(file_x > 450.0, "Hebrew File menu not anchored to the right: {file_x}");
-        crate::i18n::set_language("en");
     }
 
     #[test]
