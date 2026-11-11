@@ -109,20 +109,22 @@ impl Headless {
             return Ok(self.inspect());
         }
 
-        let folder = path.replace('\\', "/").rsplit_once('/').map(|(folder, _)| format!("{folder}/")).unwrap_or_default();
-        let fs = &self.fs;
-        let linked = |relative: &str| -> Option<Vec<u8>> {
-            let relative = relative.trim().replace('\\', "/");
-            let plain = !relative.is_empty() && !relative.contains(':') && !relative.starts_with('/');
-            let inside = relative.split('/').all(|part| !part.is_empty() && part != "." && part != "..");
-            if !plain || !inside {
-                return None;
-            }
-
-            read_file(fs, &format!("{folder}{relative}")).ok()
-        };
-
-        file_cmds::open_bytes_linked(&mut self.session, &bytes, Some(path.to_string()), &linked)?;
+        {
+            let fs = &self.fs;
+            let read = |path: &str| read_file(fs, path).map_err(|e| e.to_string());
+            let linked = file_cmds::confined_linked(path, &read);
+            // Dependencies are recorded under absolute document identities; map them back below the document's own root.
+            // A trusted session follows them as written. If the mapping fails (symlinked folder, Windows spelling) it fails closed.
+            let identity = file_cmds::document_identity(path);
+            let root = identity.strip_suffix(path.replace('\\', "/").as_str()).map(str::to_string);
+            let within = |dependency: &str| {
+                let relative =
+                    root.as_deref().and_then(|root| dependency.strip_prefix(root)).ok_or_else(|| format!("{dependency} is outside the workspace"))?;
+                read(relative)
+            };
+            let external: Option<file_cmds::ExternalRead> = if self.trusted() { None } else { Some(&within) };
+            file_cmds::open_bytes_within(&mut self.session, &bytes, Some(path.to_string()), &linked, external)?;
+        }
         if self.session.path.is_some() {
             self.session.path = Some(path.to_string());
         }

@@ -1,5 +1,11 @@
 pub use crate::Exported;
+pub use crate::linked_files::{ExternalRead, confined_linked};
 pub use crate::linked_resource::reader as linked_files;
+
+/// The absolute, canonical form documents are identified by (dependencies are recorded this way).
+pub fn document_identity(path: &str) -> String {
+    crate::document_path::normalize(path)
+}
 
 use serde_json::{Value as J, json};
 
@@ -146,6 +152,17 @@ pub fn open_bytes(session: &mut Session, bytes: &[u8], name: Option<String>) -> 
 }
 
 pub fn open_bytes_linked(session: &mut Session, bytes: &[u8], name: Option<String>, linked: &dyn Fn(&str) -> Option<Vec<u8>>) -> Result<()> {
+    open_bytes_within(session, bytes, name, linked, None)
+}
+
+/// [`open_bytes_linked`] where, with `external`, `.sbs` dependencies are read only through it (automation's Workspace roots).
+pub fn open_bytes_within(
+    session: &mut Session,
+    bytes: &[u8],
+    name: Option<String>,
+    linked: &dyn Fn(&str) -> Option<Vec<u8>>,
+    external: Option<crate::linked_files::ExternalRead>,
+) -> Result<()> {
     let name = name.map(|path| crate::document_path::normalize(&path));
     if let Some(name) = &name
         && let Some((id, ..)) = session.open_packages().into_iter().find(|entry| entry.2 == Some(name.as_str()))
@@ -165,7 +182,7 @@ pub fn open_bytes_linked(session: &mut Session, bytes: &[u8], name: Option<Strin
     for (path, source) in &session.pkg.dependencies {
         read.pkg.dependencies.entry(path.clone()).or_insert_with(|| source.clone());
     }
-    let link_warnings = crate::linked_files::load(&mut read.pkg);
+    let link_warnings = crate::linked_files::load_with(&mut read.pkg, external);
     let path = if read.warnings.is_empty() { name } else { None };
     read.warnings.extend(link_warnings);
     session.open_package(read.pkg, path)?;
