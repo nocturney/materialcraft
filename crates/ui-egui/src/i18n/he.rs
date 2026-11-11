@@ -333,6 +333,34 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Windows", "חלונות"),
     ("Your changes will be lost if you don't save them.", "השינויים יאבדו אם לא יישמרו."),
     ("Zoom the graph and the views", "שינוי התקריב של הגרף והתצוגות"),
+    // Native 3D-view and material-export controls (source-linked).
+    (
+        "A folder: material.mtlx, material.json, resources/ and the optional preview.png",
+        "תיקייה: material.mtlx, material.json, resources/ וקובץ preview.png (אופציונלי)",
+    ),
+    ("Clear material assignments", "ניקוי שיוכי חומרים"),
+    ("Displacement scale", "קנה מידה של היסט"),
+    ("Drop to apply graph outputs", "שחררו כאן כדי להחיל את פלטי הגרף"),
+    ("Environment background", "רקע הסביבה"),
+    ("Exposed parameters", "פרמטרים חשופים"),
+    ("Exposure", "חשיפה"),
+    ("Flip normal map Y (DirectX)", "היפוך ציר Y במפת הנורמל (DirectX)"),
+    ("Height depth (% of the mesh size)", "עומק גובה (% מגודל הרשת)"),
+    ("Height level (0 = rises out of the surface)", "מפלס גובה (0 = בליטה מעל פני השטח)"),
+    ("Include preview.png", "כלילת preview.png"),
+    ("Material", "חומר"),
+    ("Normal orientation", "כיוון מפת הנורמל"),
+    (
+        "One .mcmat archive: material.mtlx, material.json, resources/ and the optional preview.png",
+        "ארכיון .mcmat יחיד: material.mtlx, material.json, resources/ וקובץ preview.png (אופציונלי)",
+    ),
+    (
+        "Publishing arrives with the new .mcmat format (#190); these options are kept for it",
+        "אפשרות הפרסום תתווסף עם פורמט .mcmat החדש (#190); ההגדרות הללו נשמרות לקראתו",
+    ),
+    ("Show alpha channel", "הצגת ערוץ אלפא"),
+    ("Transparency (alpha)", "שקיפות (אלפא)"),
+    ("Unassigned", "ללא שיוך"),
 ];
 
 #[cfg(test)]
@@ -434,6 +462,42 @@ mod hebrew_library_and_graph_navigation_tests {
             let translations: Vec<_> = TABLE.iter().filter(|(source, _)| source == key).collect();
             assert_eq!(translations.len(), 1, "missing or duplicate Hebrew key: {key}");
             assert!(translations[0].1.chars().any(|c| ('\u{0590}'..='\u{05ff}').contains(&c)), "not Hebrew: {key}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod hebrew_view3d_material_export_tests {
+    use super::TABLE;
+
+    #[test]
+    fn native_view3d_and_material_export_controls_are_hebrew() {
+        let sources = [include_str!("../view3d.rs"), include_str!("../export/material_tab.rs")];
+        const KEYS: &[&str] = &[
+            "A folder: material.mtlx, material.json, resources/ and the optional preview.png",
+            "Clear material assignments",
+            "Displacement scale",
+            "Drop to apply graph outputs",
+            "Environment background",
+            "Exposed parameters",
+            "Exposure",
+            "Flip normal map Y (DirectX)",
+            "Height depth (% of the mesh size)",
+            "Height level (0 = rises out of the surface)",
+            "Include preview.png",
+            "Material",
+            "Normal orientation",
+            "One .mcmat archive: material.mtlx, material.json, resources/ and the optional preview.png",
+            "Publishing arrives with the new .mcmat format (#190); these options are kept for it",
+            "Show alpha channel",
+            "Transparency (alpha)",
+            "Unassigned",
+        ];
+        for key in KEYS {
+            assert!(sources.iter().any(|source| source.contains(&format!("tr({key:?})"))), "not a Native tr() callsite: {key}");
+            let matches: Vec<_> = TABLE.iter().filter(|(source, _)| source == key).collect();
+            assert_eq!(matches.len(), 1, "missing/duplicate Hebrew key: {key}");
+            assert!(matches[0].1.chars().any(|c| ('\u{0590}'..='\u{05ff}').contains(&c)), "translation is not Hebrew: {key}");
         }
     }
 }
