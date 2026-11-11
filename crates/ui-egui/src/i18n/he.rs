@@ -20,9 +20,11 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Add Comment", "הוספת הערה"),
     ("Add Frame", "הוספת מסגרת"),
     ("Add frame around selection", "הוספת מסגרת מסביב לבחירה"),
+    ("Add frame around the selection", "הוספת מסגרת סביב הבחירה"),
     ("Add navigation pin", "הוספת סמן ניווט"),
     ("Add node", "הוספת צומת"),
     ("Add to Favorites", "הוספה למועדפים"),
+    ("Add to graph", "הוספה לגרף"),
     ("Align centers horizontally", "יישור מרכזים אופקית"),
     ("Align centers vertically", "יישור מרכזים אנכית"),
     ("Align left", "יישור לשמאל"),
@@ -53,6 +55,10 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Camera", "מצלמה"),
     ("Cancel", "ביטול"),
     ("Category", "קטגוריה"),
+    (
+        "Change Preview size while editing in Edit > Preferences. Exports use each node's configured output size.",
+        "כדי לשנות את גודל התצוגה המקדימה בזמן עריכה, פתחו את העדפות בתפריט עריכה. הייצוא משתמש בגודל הפלט שהוגדר לכל צומת.",
+    ),
     ("Changes take effect when the graph input is created.", "השינויים ייכנסו לתוקף עם יצירת הקלט בגרף."),
     ("Check at least one output to export", "יש לבחור לפחות פלט אחד לייצוא"),
     ("Check for updates...", "בדיקת עדכונים..."),
@@ -76,6 +82,7 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Constant", "קבוע"),
     ("Control", "בקרה"),
     ("Copy", "העתקה"),
+    ("Copy info to clipboard", "העתקת המידע ללוח"),
     ("Copy selection", "העתקת הבחירה"),
     ("Couldn't save", "לא ניתן לשמור"),
     ("Create", "יצירה"),
@@ -125,11 +132,13 @@ pub const TABLE: &[(&str, &str)] = &[
     ("File", "קובץ"),
     ("File names", "שמות קבצים"),
     ("files", "קבצים"),
+    ("Filter", "סינון"),
     ("Filters", "מסננים"),
     ("Fit", "התאמה"),
     ("Folder", "תיקייה"),
     ("Format", "תבנית"),
     ("Frame all", "הצגת הכול במסגרת"),
+    ("Frame all (F)", "התאמת התצוגה לכל הצמתים (F)"),
     ("From graph", "מהגרף"),
     ("Full size", "גודל מלא"),
     ("full size", "גודל מלא"),
@@ -152,6 +161,7 @@ pub const TABLE: &[(&str, &str)] = &[
     ("History", "היסטוריה"),
     ("Home screen...", "מסך הבית..."),
     ("Home", "בית"),
+    ("Icons", "סמלים"),
     ("Identifier", "מזהה"),
     ("Import bitmap...", "ייבוא תמונת מפת סיביות..."),
     ("Import vector graphics...", "ייבוא גרפיקה וקטורית..."),
@@ -169,6 +179,7 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Link width and height", "קישור רוחב וגובה"),
     ("List", "רשימה"),
     ("Load mesh...", "טעינת רשת תלת־ממד..."),
+    ("Manage parameters", "ניהול פרמטרים"),
     ("Material filters", "מסנני חומרים"),
     ("MaterialCraft Project (*.mcraft)", "פרויקט MaterialCraft (*.mcraft)"),
     ("MaterialX export isn't available yet (#190)", "ייצוא MaterialX עדיין אינו זמין (#190)"),
@@ -195,11 +206,14 @@ pub const TABLE: &[(&str, &str)] = &[
         "לא הוחל: הגרף או החבילה הפעילים השתנו בזמן שחלון בחירת הקובץ היה פתוח",
     ),
     ("not available yet", "עדיין לא זמין"),
+    ("Nothing in this category yet", "עדיין אין פריטים בקטגוריה הזאת"),
+    ("Nothing matches", "לא נמצאו תוצאות תואמות"),
     ("OK", "אישור"),
     ("Open", "פתיחה"),
     ("Open graph", "פתיחת גרף"),
     ("Open package...", "פתיחת חבילה..."),
     ("Open package... (Ctrl+O)", "פתיחת חבילה... (Ctrl+O)"),
+    ("Open reference", "פתיחת ההפניה"),
     ("Open...", "פתיחה..."),
     ("Opened", "נפתח"),
     ("Opened with", "נפתח עם"),
@@ -224,6 +238,7 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Preset name", "שם ההגדרה הקבועה מראש"),
     ("Presets", "הגדרות קבועות מראש"),
     ("Preview", "תצוגה מקדימה"),
+    ("Preview limit", "מגבלת תצוגה מקדימה"),
     ("Preview size", "גודל התצוגה המקדימה"),
     ("Preview size while editing", "גודל התצוגה המקדימה בזמן עריכה"),
     ("Previous pin", "סיכת ניווט קודמת"),
@@ -233,6 +248,7 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Recent packages", "חבילות אחרונות"),
     ("Redo", "ביצוע מחדש"),
     ("Redo (Ctrl+Y)", "ביצוע חוזר (Ctrl+Y)"),
+    ("Reload library", "טעינת הספרייה מחדש"),
     ("Reload resources", "טעינה מחדש של משאבים"),
     ("Remove from Favorites", "הסרה מהמועדפים"),
     ("Render time", "זמן עיבוד"),
@@ -245,6 +261,7 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Reset to default", "איפוס לברירת מחדל"),
     ("Resolution", "רזולוציה"),
     ("Resources", "משאבים"),
+    ("Return to parent graph", "חזרה לגרף האב"),
     ("Revert", "שחזור למצב הקודם"),
     ("Right-click a node parameter > Expose as graph input", "לחצו לחיצה ימנית על פרמטר בצומת > חשיפה כקלט לגרף"),
     ("Rotation", "סיבוב"),
@@ -261,6 +278,8 @@ pub const TABLE: &[(&str, &str)] = &[
     ("SBS XML Package (*.sbs)", "חבילת SBS בפורמט XML (*.sbs)"),
     ("Scene", "סצנה"),
     ("Search", "חיפוש"),
+    ("Search functions", "חיפוש פונקציות"),
+    ("Search FX-Map nodes", "חיפוש צומתי FX-Map"),
     ("Search nodes...", "חיפוש צמתים..."),
     ("Select all", "בחירת הכול"),
     ("Select an entry and click the star to add it to Favorites", "בחרו פריט ולחצו על הכוכב כדי להוסיפו למועדפים"),
@@ -268,11 +287,14 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Select upstream nodes", "בחירת צמתים במעלה הזרימה"),
     ("Send to TextureCraft", "שליחה אל TextureCraft"),
     ("Sent to TextureCraft: find it on the shelf under My smart materials", "נשלח אל TextureCraft: ניתן למצוא אותו במדף 'החומרים החכמים שלי'"),
+    ("Set a node as the root", "הגדרת צומת כצומת השורש"),
     ("Shortcuts", "קיצורי מקשים"),
     ("Shortcuts list...", "רשימת קיצורי מקשים..."),
     ("Show at startup", "הצגה בעת הפעלה"),
     ("Show in the 2D view", "הצגה בתצוגת הדו־ממד"),
     ("Show node thumbnails", "הצגת תמונות ממוזערות לצמתים"),
+    ("Show nodes for other graph types", "הצגת צמתים לסוגי גרפים אחרים"),
+    ("Show nodes not in MaterialCraft yet", "הצגת צמתים שעדיין אינם זמינים ב־MaterialCraft"),
     ("Size", "גודל"),
     ("Snap to grid", "הצמדה לרשת"),
     ("Specific parameters", "פרמטרים ייחודיים"),
@@ -369,6 +391,49 @@ mod native_hebrew_visible_help_tests {
             let matches: Vec<_> = TABLE.iter().filter(|(source, _)| source == key).collect();
             assert_eq!(matches.len(), 1, "missing or duplicate Hebrew UI key: {key}");
             assert!(matches[0].1.chars().any(|ch| ('\u{0590}'..='\u{05ff}').contains(&ch)), "visible Native UI label is not in Hebrew: {key}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod hebrew_library_and_graph_navigation_tests {
+    use super::TABLE;
+
+    #[test]
+    fn native_library_and_graph_navigation_controls_are_hebrew() {
+        // Literal call-site source: no invented keys or changed action IDs.
+        let files = [
+            include_str!("../library.rs"),
+            include_str!("../graph/toolbar.rs"),
+            include_str!("../graph/instance_context_menu.rs"),
+            include_str!("../graph/canvas.rs"),
+        ];
+        const KEYS: &[&str] = &[
+            "Search functions",
+            "Search FX-Map nodes",
+            "Reload library",
+            "Icons",
+            "Filter",
+            "Show nodes not in MaterialCraft yet",
+            "Show nodes for other graph types",
+            "Nothing in this category yet",
+            "Nothing matches",
+            "Add to graph",
+            "Add frame around the selection",
+            "Return to parent graph",
+            "Set a node as the root",
+            "Frame all (F)",
+            "Copy info to clipboard",
+            "Manage parameters",
+            "Open reference",
+            "Preview limit",
+            "Change Preview size while editing in Edit > Preferences. Exports use each node's configured output size.",
+        ];
+        for key in KEYS {
+            assert!(files.iter().any(|f| f.contains(&format!("tr({key:?})"))), "not a live Native tr() key: {key}");
+            let translations: Vec<_> = TABLE.iter().filter(|(source, _)| source == key).collect();
+            assert_eq!(translations.len(), 1, "missing or duplicate Hebrew key: {key}");
+            assert!(translations[0].1.chars().any(|c| ('\u{0590}'..='\u{05ff}').contains(&c)), "not Hebrew: {key}");
         }
     }
 }
