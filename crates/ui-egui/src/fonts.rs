@@ -57,9 +57,13 @@ fn system_files(hebrew: bool) -> Vec<(std::path::PathBuf, u32)> {
 }
 
 /// OS locale tags may include region/encoding suffixes, whereas Preferences
-/// normally stores a two-letter language code.
+/// normally stores a two-letter language code. Some older systems use the
+/// legacy ISO 639 code "iw" for Hebrew instead of "he".
 fn matches_language(language: &str, code: &str) -> bool {
-    language.split(['-', '_', '.']).next().is_some_and(|part| part.eq_ignore_ascii_case(code))
+    language.split(['-', '_', '.']).next().is_some_and(|part| {
+        part.eq_ignore_ascii_case(code)
+            || (code.eq_ignore_ascii_case("he") && part.eq_ignore_ascii_case("iw"))
+    })
 }
 
 /// Loaded system faces persist as egui fallbacks when the user changes language.
@@ -153,6 +157,10 @@ mod tests {
         let mut fonts = UiFonts::default();
         fonts.update(&egui::Context::default(), "he-IL", false);
         assert!(fonts.covers_hebrew(), "missing Hebrew system UI fallback for he-IL");
+
+        let mut legacy_fonts = UiFonts::default();
+        legacy_fonts.update(&egui::Context::default(), "iw_IL.UTF-8", false);
+        assert!(legacy_fonts.covers_hebrew(), "missing Hebrew fallback for legacy iw locale");
     }
 }
 
@@ -162,12 +170,23 @@ mod locale_tests {
 
     #[test]
     fn fallback_accepts_os_locale_variants_without_matching_other_languages() {
-        for locale in ["he", "he-IL", "he_IL.UTF-8", "HE-il"] {
+        for locale in [
+            "he",
+            "he-IL",
+            "he_IL.UTF-8",
+            "HE-il",
+            "iw",
+            "iw-IL",
+            "iw_IL.UTF-8",
+            "IW-il",
+        ] {
             assert!(matches_language(locale, "he"), "{locale}");
         }
         assert!(matches_language("ar-EG", "ar"));
         assert!(!matches_language("en-US", "he"));
         assert!(!matches_language("hi", "he"));
+        assert!(!matches_language("iwi-IL", "he"));
+        assert!(!matches_language("iw-IL", "ar"));
         assert!(!matches_language("ar-EG", "he"));
     }
 }
