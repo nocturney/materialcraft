@@ -9,6 +9,7 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 mod ar;
+mod he;
 
 pub struct Language {
     /// BCP 47 code ("en", "ar").
@@ -21,10 +22,10 @@ pub struct Language {
     pub table: &'static [(&'static str, &'static str)],
 }
 
-const COUNT: usize = 2;
+const COUNT: usize = 3;
 
 pub static LANGUAGES: [Language; COUNT] =
-    [Language { code: "en", name: "English", english: "English", table: &[] }, Language { code: "ar", name: "العربية", english: "Arabic", table: ar::TABLE }];
+    [Language { code: "en", name: "English", english: "English", table: &[] }, Language { code: "ar", name: "العربية", english: "Arabic", table: ar::TABLE }, Language { code: "he", name: "עברית", english: "Hebrew", table: he::TABLE }];
 
 static MAPS: [OnceLock<HashMap<&'static str, &'static str>>; COUNT] = [const { OnceLock::new() }; COUNT];
 static CURRENT: AtomicUsize = AtomicUsize::new(0);
@@ -115,8 +116,31 @@ mod tests {
         assert_eq!(language_for_locale("ar"), "ar");
         assert_eq!(language_for_locale("ar-EG"), "ar");
         assert_eq!(language_for_locale("ar_SA.UTF-8"), "ar");
+        assert_eq!(language_for_locale("he"), "he");
+        assert_eq!(language_for_locale("he-IL"), "he");
+        assert_eq!(language_for_locale("he_IL.UTF-8"), "he");
+        assert!(is_rtl_code("he"));
         assert_eq!(language_for_locale("en-US"), "en");
         assert_eq!(language_for_locale("fr-FR"), "en");
+    }
+
+    #[test]
+    fn hebrew_table_has_no_duplicate_keys() {
+        let mut seen = std::collections::HashSet::new();
+        for (k, _) in he::TABLE {
+            assert!(seen.insert(*k), "duplicate key in he::TABLE: {k:?}");
+        }
+    }
+
+    #[test]
+    fn hebrew_placeholders_match_source() {
+        for (k, v) in he::TABLE {
+            let mut kp: Vec<&str> = k.split('{').skip(1).filter_map(|s| s.split_once('}').map(|(p, _)| p)).collect();
+            let mut vp: Vec<&str> = v.split('{').skip(1).filter_map(|s| s.split_once('}').map(|(p, _)| p)).collect();
+            kp.sort();
+            vp.sort();
+            assert_eq!(kp, vp, "mismatched placeholders in {k:?} vs {v:?}");
+        }
     }
 
     #[test]
