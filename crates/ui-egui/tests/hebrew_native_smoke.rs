@@ -12,6 +12,40 @@ fn hebrew_app() -> MaterialCraftApp {
     MaterialCraftApp::headless(materialcraft_engine::new_session(), ui)
 }
 
+/// A disposable, exclusively created directory for native save/reopen fixtures.
+/// The screenshot output directory is deliberately separate and stays on disk.
+struct RoundTripDir(std::path::PathBuf);
+
+impl RoundTripDir {
+    fn new() -> Self {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).expect("system clock").as_nanos();
+        for attempt in 0..32 {
+            let path = std::env::temp_dir().join(format!(
+                "materialcraft-hebrew-smoke-{}-{nonce}-{attempt}",
+                std::process::id()
+            ));
+            match std::fs::create_dir(&path) {
+                Ok(()) => return Self(path),
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => panic!("cannot create isolated Hebrew round-trip directory: {error}"),
+            }
+        }
+        panic!("cannot allocate a unique Hebrew round-trip directory");
+    }
+
+    fn path(&self) -> &std::path::Path {
+        &self.0
+    }
+}
+
+impl Drop for RoundTripDir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
 fn round_trip(dir: &std::path::Path) -> MaterialCraftApp {
     std::fs::create_dir_all(dir).expect("snapshot/output directory");
     let path = dir.join("artcraft-hebrew-roundtrip.sbs");
@@ -36,9 +70,9 @@ fn round_trip(dir: &std::path::Path) -> MaterialCraftApp {
 
 #[test]
 fn hebrew_native_open_save_round_trip() {
-    let dir = std::env::temp_dir().join(format!("materialcraft-hebrew-smoke-{}", std::process::id()));
-    let _app = round_trip(&dir);
-    println!("PASS: native Hebrew save/reopen at {}", dir.display());
+    let dir = RoundTripDir::new();
+    let _app = round_trip(dir.path());
+    println!("PASS: native Hebrew save/reopen at {}", dir.path().display());
 }
 
 #[test]
@@ -50,8 +84,10 @@ fn hebrew_native_rtl_offscreen_screenshot() {
         kittest::{By, Queryable},
     };
 
-    let dir = std::path::PathBuf::from(std::env::var_os("MC_SNAPSHOT_DIR").expect("set MC_SNAPSHOT_DIR to a writable output directory"));
-    let app = round_trip(&dir);
+    let output_dir = std::path::PathBuf::from(std::env::var_os("MC_SNAPSHOT_DIR").expect("set MC_SNAPSHOT_DIR to a writable output directory"));
+    std::fs::create_dir_all(&output_dir).expect("screenshot output directory");
+    let scratch = RoundTripDir::new();
+    let app = round_trip(scratch.path());
     let mut harness: Harness<'static, MaterialCraftApp> = Harness::builder().with_size(vec2(1440.0, 900.0)).with_pixels_per_point(1.0).wgpu().build_ui_state(
         |ui, app: &mut MaterialCraftApp| {
             app.step(&ui.ctx().clone());
@@ -62,7 +98,7 @@ fn hebrew_native_rtl_offscreen_screenshot() {
     harness.run_steps(8);
     assert!(harness.query(By::new().role(Role::Button).label("קובץ")).is_some(), "the native UI must expose a translated File menu");
     let image = harness.render().expect("offscreen egui render");
-    let output = dir.join("materialcraft-hebrew-native-rtl.png");
+    let output = output_dir.join("materialcraft-hebrew-native-rtl.png");
     image.save(&output).expect("write screenshot");
     assert!(output.metadata().expect("saved screenshot").len() > 1_000);
     println!("PASS: native Hebrew egui RTL screenshot {}", output.display());
