@@ -21,10 +21,12 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Add frame around selection", "הוספת מסגרת מסביב לבחירה"),
     ("Add navigation pin", "הוספת סמן ניווט"),
     ("Add node", "הוספת צומת"),
+    ("Add to Favorites", "הוספה למועדפים"),
     ("Align centers horizontally", "יישור מרכזים אופקית"),
     ("Align centers vertically", "יישור מרכזים אנכית"),
     ("Align left", "יישור לשמאל"),
     ("Align top", "יישור למעלה"),
+    ("Alpha channel", "ערוץ אלפא"),
     ("All", "הכול"),
     ("All nodes", "כל הצמתים"),
     ("An input already uses this identifier.", "מזהה זה כבר משמש קלט אחר."),
@@ -32,6 +34,8 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Apply", "החלה"),
     ("ArtCraft website...", "אתר ArtCraft..."),
     ("As JSON", "כ־JSON"),
+    ("Assign an image with View in 3D view, or connect Output nodes with material usages", "שייכו תמונה לתצוגת תלת־ממד או חברו צומתי פלט לחומר"),
+    ("Atomic nodes", "צמתים בסיסיים"),
     ("Attributes", "מאפיינים"),
     ("Author", "מחבר"),
     ("Author URL", "כתובת URL של המחבר"),
@@ -57,6 +61,7 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Clear cache", "ניקוי מטמון"),
     ("Clear nodes thumbnails", "ניקוי תמונות ממוזערות של צמתים"),
     ("Clear recent packages", "ניקוי רשימת החבילות האחרונות"),
+    ("Click a node to show it here", "בחרו צומת כדי להציגו כאן"),
     ("Close", "סגירה"),
     ("Close all", "סגירת הכול"),
     ("Close expose parameter", "סגירת חלון חשיפת הפרמטר"),
@@ -107,6 +112,7 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Export outputs...", "ייצוא פלטים..."),
     ("Export settings saved", "הגדרות הייצוא נשמרו"),
     ("Exported", "יוצא"),
+    ("Favorites", "מועדפים"),
     ("Expose Parameter", "חשיפת פרמטר"),
     ("File", "קובץ"),
     ("File names", "שמות קבצים"),
@@ -123,6 +129,7 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Function graph", "גרף פונקציות"),
     ("function nodes", "צומתי פונקציה"),
     ("Graph", "גרף"),
+    ("Graph items", "רכיבי גרף"),
     ("Graph instance", "מופע גרף"),
     ("Graph name", "שם הגרף"),
     ("Graph...", "גרף..."),
@@ -183,6 +190,8 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Pan the camera", "הזזת המצלמה"),
     ("Pan the graph", "הזזת הגרף"),
     ("Parent graph", "גרף אב"),
+    ("Parent size", "גודל גרף האב"),
+    ("Parent size:", "גודל גרף האב:"),
     ("Paste", "הדבקה"),
     ("Pattern", "דוגמה"),
     ("Patterns", "דוגמאות"),
@@ -204,6 +213,7 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Recent packages", "חבילות אחרונות"),
     ("Redo", "ביצוע מחדש"),
     ("Reload resources", "טעינה מחדש של משאבים"),
+    ("Remove from Favorites", "הסרה מהמועדפים"),
     ("Render time", "זמן עיבוד"),
     ("Renderer", "מנוע עיבוד"),
     ("Report a bug...", "דיווח על תקלה..."),
@@ -215,6 +225,7 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Resolution", "רזולוציה"),
     ("Resources", "משאבים"),
     ("Revert", "שחזור למצב הקודם"),
+    ("Right-click a node parameter > Expose as graph input", "לחצו לחיצה ימנית על פרמטר בצומת > חשיפה כקלט לגרף"),
     ("Rotation", "סיבוב"),
     ("Samples", "דוגמאות"),
     ("Save", "שמירה"),
@@ -229,6 +240,7 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Search", "חיפוש"),
     ("Search nodes...", "חיפוש צמתים..."),
     ("Select all", "בחירת הכול"),
+    ("Select an entry and click the star to add it to Favorites", "בחרו פריט ולחצו על הכוכב כדי להוסיפו למועדפים"),
     ("Select downstream nodes", "בחירת צמתים במורד הזרימה"),
     ("Select upstream nodes", "בחירת צמתים במעלה הזרימה"),
     ("Send to TextureCraft", "שליחה אל TextureCraft"),
@@ -298,6 +310,36 @@ mod expose_parameter_hebrew_tests {
             let translated =
                 TABLE.iter().find(|(source, _)| source == key).map(|(_, value)| *value).unwrap_or_else(|| panic!("missing Hebrew dialog key: {key}"));
             assert!(translated.chars().any(|ch| ('\u{0590}'..='\u{05ff}').contains(&ch)), "dialog text is not Hebrew: {key}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod native_hebrew_visible_help_tests {
+    use super::TABLE;
+
+    #[test]
+    fn visible_native_empty_states_and_library_actions_are_hebrew() {
+        // Source-linked keys from view2d.rs, view3d.rs, property/graph.rs,
+        // graph/toolbar.rs, graph/canvas.rs and library.rs.
+        const KEYS: &[&str] = &[
+            "Add to Favorites",
+            "Alpha channel",
+            "Assign an image with View in 3D view, or connect Output nodes with material usages",
+            "Atomic nodes",
+            "Click a node to show it here",
+            "Favorites",
+            "Graph items",
+            "Parent size",
+            "Parent size:",
+            "Remove from Favorites",
+            "Right-click a node parameter > Expose as graph input",
+            "Select an entry and click the star to add it to Favorites",
+        ];
+        for key in KEYS {
+            let matches: Vec<_> = TABLE.iter().filter(|(source, _)| source == key).collect();
+            assert_eq!(matches.len(), 1, "missing or duplicate Hebrew UI key: {key}");
+            assert!(matches[0].1.chars().any(|ch| ('\u{0590}'..='\u{05ff}').contains(&ch)), "visible Native UI label is not in Hebrew: {key}");
         }
     }
 }
