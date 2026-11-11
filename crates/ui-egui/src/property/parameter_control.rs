@@ -34,7 +34,8 @@ pub(super) fn show(
     let can_capture = function.is_none() || evaluated.is_some();
     let tokens = Tokens::get(ui.ctx());
     ui.push_id((node.id, base.is_some(), &descriptor.id), |ui| {
-        ui.allocate_ui_with_layout(egui::vec2(ui.available_width(), ui.spacing().interact_size.y), egui::Layout::left_to_right(egui::Align::Min), |ui| {
+        let (content_layout, action_layout) = parameter_header_layouts(crate::i18n::is_rtl());
+        ui.allocate_ui_with_layout(egui::vec2(ui.available_width(), ui.spacing().interact_size.y), content_layout, |ui| {
             let actions_width = 32.0 + if driven { 26.0 } else { 0.0 } + if base.is_some() { 26.0 } else { 0.0 };
             let content_width = (ui.available_width() - actions_width).max(40.0);
             ui.vertical(|ui| {
@@ -45,7 +46,7 @@ pub(super) fn show(
                     literal(app, ui);
                 }
             });
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.with_layout(action_layout, |ui| {
                 let menu = ui.menu_button(icon::DOTS_THREE, |ui| {
                     for (mode, label) in [("empty", "Empty function"), ("constant", "Constant value")] {
                         if ui.add_enabled(mode == "empty" || can_capture, egui::Button::new(tr(label))).clicked() {
@@ -155,4 +156,29 @@ fn inheritance(app: &mut MaterialCraftApp, ui: &mut Ui, node: &Node, parameter: 
     });
     crate::widgets::name(&menu.response, egui::Role::Button, &format!("{} inheritance: {label}", parameter.label()));
     menu.response.on_hover_text(tr(label));
+}
+
+/// Keep property labels at the reading edge and place their action icons
+/// on the opposite edge without changing the order of the underlying controls.
+fn parameter_header_layouts(rtl: bool) -> (egui::Layout, egui::Layout) {
+    if rtl {
+        (egui::Layout::right_to_left(egui::Align::Min), egui::Layout::left_to_right(egui::Align::Center))
+    } else {
+        (egui::Layout::left_to_right(egui::Align::Min), egui::Layout::right_to_left(egui::Align::Center))
+    }
+}
+
+#[cfg(test)]
+mod rtl_layout_tests {
+    use super::*;
+
+    #[test]
+    fn inspector_parameter_header_flips_both_label_and_action_sides() {
+        let (en_content, en_actions) = parameter_header_layouts(false);
+        let (he_content, he_actions) = parameter_header_layouts(true);
+        assert_eq!(en_content.main_dir, egui::Direction::LeftToRight);
+        assert_eq!(en_actions.main_dir, egui::Direction::RightToLeft);
+        assert_eq!(he_content.main_dir, egui::Direction::RightToLeft);
+        assert_eq!(he_actions.main_dir, egui::Direction::LeftToRight);
+    }
 }
