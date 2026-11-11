@@ -192,6 +192,19 @@ mod tests {
     }
 
     #[test]
+    fn hebrew_inspector_graph_attributes_are_localized() {
+        // All these English source keys already pass through tr() in the Native
+        // graph inspector; keep both attribute editors and size controls legible.
+        let inspector = ["Identifier", "Label", "Description", "Category", "Author", "Author URL", "Tags", "Group", "User Data", "Width", "Height"];
+        for key in inspector {
+            let translated =
+                he::TABLE.iter().find(|(source, _)| *source == key).map(|(_, value)| *value).unwrap_or_else(|| panic!("missing Hebrew Inspector label: {key}"));
+            assert_ne!(translated, key, "untranslated Inspector label: {key}");
+            assert!(translated.chars().any(|ch| ('א'..='ת').contains(&ch)), "Inspector label lacks Hebrew glyphs: {key}");
+        }
+    }
+
+    #[test]
     fn arabic_table_has_no_duplicate_keys() {
         let mut seen = std::collections::HashSet::new();
         for (k, _) in ar::TABLE {
