@@ -60,10 +60,10 @@ fn system_files(hebrew: bool) -> Vec<(std::path::PathBuf, u32)> {
 /// normally stores a two-letter language code. Some older systems use the
 /// legacy ISO 639 code "iw" for Hebrew instead of "he".
 fn matches_language(language: &str, code: &str) -> bool {
-    language.split(['-', '_', '.']).next().is_some_and(|part| {
-        part.eq_ignore_ascii_case(code)
-            || (code.eq_ignore_ascii_case("he") && part.eq_ignore_ascii_case("iw"))
-    })
+    language
+        .split(['-', '_', '.'])
+        .next()
+        .is_some_and(|part| part.eq_ignore_ascii_case(code) || (code.eq_ignore_ascii_case("he") && part.eq_ignore_ascii_case("iw")))
 }
 
 /// Loaded system faces persist as egui fallbacks when the user changes language.
@@ -170,16 +170,7 @@ mod locale_tests {
 
     #[test]
     fn fallback_accepts_os_locale_variants_without_matching_other_languages() {
-        for locale in [
-            "he",
-            "he-IL",
-            "he_IL.UTF-8",
-            "HE-il",
-            "iw",
-            "iw-IL",
-            "iw_IL.UTF-8",
-            "IW-il",
-        ] {
+        for locale in ["he", "he-IL", "he_IL.UTF-8", "HE-il", "iw", "iw-IL", "iw_IL.UTF-8", "IW-il"] {
             assert!(matches_language(locale, "he"), "{locale}");
         }
         assert!(matches_language("ar-EG", "ar"));
@@ -195,6 +186,40 @@ mod locale_tests {
 mod language_switch_tests {
     use super::UiFonts;
     use std::sync::Arc;
+
+    /// A loaded font file is not enough: the active egui font families must
+    /// actually be able to draw Hebrew after switching the UI language.
+    #[test]
+    fn native_hebrew_font_renders_glyphs_in_both_ui_families() {
+        let ctx = egui::Context::default();
+        let mut fonts = UiFonts::default();
+        fonts.update(&ctx, "he-IL", false);
+        assert!(fonts.covers_hebrew(), "no Hebrew system font was installed");
+        // egui materializes its font cache on the first UI frame.
+        let mut output = ctx.run_ui(egui::RawInput::default(), |_| {});
+        output.textures_delta.clear();
+
+        ctx.fonts_mut(|atlas| {
+            for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
+                let font_id = egui::FontId::new(18.0, family.clone());
+                assert!(atlas.has_glyphs(&font_id, "שמירה פתיחה עברית"), "{family:?} is missing Hebrew UI glyphs");
+            }
+        });
+
+        // Also probe the selected system face alone. Built-in/default fonts
+        // might themselves contain Hebrew and otherwise hide a broken fallback.
+        let family = egui::FontFamily::Name("hebrew-system-only".into());
+        let mut defs = egui::FontDefinitions::default();
+        defs.font_data.insert("hebrew-system-only".into(), fonts.hebrew.as_ref().unwrap().clone());
+        defs.families.insert(family.clone(), vec!["hebrew-system-only".into()]);
+        let probe = egui::Context::default();
+        probe.set_fonts(defs);
+        let mut probe_output = probe.run_ui(egui::RawInput::default(), |_| {});
+        probe_output.textures_delta.clear();
+        probe.fonts_mut(|atlas| {
+            assert!(atlas.has_glyphs(&egui::FontId::new(18.0, family), "שמירה פתיחה עברית"), "selected macOS fallback does not actually cover Hebrew glyphs");
+        });
+    }
 
     #[test]
     fn switching_languages_preserves_both_script_faces() {
