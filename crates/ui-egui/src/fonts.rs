@@ -55,6 +55,12 @@ fn system_files(hebrew: bool) -> Vec<(std::path::PathBuf, u32)> {
     v
 }
 
+/// OS locale tags may include region/encoding suffixes, whereas Preferences
+/// normally stores a two-letter language code.
+fn matches_language(language: &str, code: &str) -> bool {
+    language.split(['-', '_', '.']).next().is_some_and(|part| part.eq_ignore_ascii_case(code))
+}
+
 /// Loaded system faces persist as egui fallbacks when the user changes language.
 #[derive(Default)]
 pub struct UiFonts {
@@ -67,8 +73,8 @@ pub struct UiFonts {
 impl UiFonts {
     /// Install a font if its script is selected, or both while the picker is open.
     pub fn update(&mut self, ctx: &egui::Context, language: &str, preferences_open: bool) {
-        let want_arabic = language == "ar" || preferences_open;
-        let want_hebrew = language == "he" || preferences_open;
+        let want_arabic = matches_language(language, "ar") || preferences_open;
+        let want_hebrew = matches_language(language, "he") || preferences_open;
         let mut changed = false;
         if want_arabic && !self.attempted_arabic {
             self.attempted_arabic = true;
@@ -144,7 +150,23 @@ mod tests {
         assert!(candidates.iter().any(|(path, _)| path.ends_with("ArialHB.ttc")));
 
         let mut fonts = UiFonts::default();
-        fonts.update(&egui::Context::default(), "he", false);
-        assert!(fonts.covers_hebrew(), "missing Hebrew system UI fallback");
+        fonts.update(&egui::Context::default(), "he-IL", false);
+        assert!(fonts.covers_hebrew(), "missing Hebrew system UI fallback for he-IL");
+    }
+}
+
+#[cfg(test)]
+mod locale_tests {
+    use super::matches_language;
+
+    #[test]
+    fn fallback_accepts_os_locale_variants_without_matching_other_languages() {
+        for locale in ["he", "he-IL", "he_IL.UTF-8", "HE-il"] {
+            assert!(matches_language(locale, "he"), "{locale}");
+        }
+        assert!(matches_language("ar-EG", "ar"));
+        assert!(!matches_language("en-US", "he"));
+        assert!(!matches_language("hi", "he"));
+        assert!(!matches_language("ar-EG", "he"));
     }
 }
