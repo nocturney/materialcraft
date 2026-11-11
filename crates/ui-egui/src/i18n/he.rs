@@ -27,6 +27,7 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Align top", "יישור למעלה"),
     ("All", "הכול"),
     ("All nodes", "כל הצמתים"),
+    ("An input already uses this identifier.", "מזהה זה כבר משמש קלט אחר."),
     ("An open-source Crafting App by the ArtCraft team and community.", "יישום יצירה בקוד פתוח מאת צוות ArtCraft והקהילה."),
     ("Apply", "החלה"),
     ("ArtCraft website...", "אתר ArtCraft..."),
@@ -47,15 +48,18 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Camera", "מצלמה"),
     ("Cancel", "ביטול"),
     ("Category", "קטגוריה"),
+    ("Changes take effect when the graph input is created.", "השינויים ייכנסו לתוקף עם יצירת הקלט בגרף."),
     ("Check at least one output to export", "יש לבחור לפחות פלט אחד לייצוא"),
     ("Check for updates...", "בדיקת עדכונים..."),
     ("Choose a folder to export to", "בחירת תיקיית יעד לייצוא"),
     ("Choose...", "בחירה..."),
+    ("Clamp", "הגבלה"),
     ("Clear cache", "ניקוי מטמון"),
     ("Clear nodes thumbnails", "ניקוי תמונות ממוזערות של צמתים"),
     ("Clear recent packages", "ניקוי רשימת החבילות האחרונות"),
     ("Close", "סגירה"),
     ("Close all", "סגירת הכול"),
+    ("Close expose parameter", "סגירת חלון חשיפת הפרמטר"),
     ("color space", "מרחב צבע"),
     ("Community (Discord)", "קהילה (Discord)"),
     ("Comparison", "השוואה"),
@@ -103,6 +107,7 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Export outputs...", "ייצוא פלטים..."),
     ("Export settings saved", "הגדרות הייצוא נשמרו"),
     ("Exported", "יוצא"),
+    ("Expose Parameter", "חשיפת פרמטר"),
     ("File", "קובץ"),
     ("File names", "שמות קבצים"),
     ("Filters", "מסננים"),
@@ -142,10 +147,14 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Last compute", "חישוב אחרון"),
     ("Library", "ספרייה"),
     ("Light", "בהיר"),
+    ("Limit values to Min and Max", "הגבלת הערכים בין מינימום למקסימום"),
     ("Link width and height", "קישור רוחב וגובה"),
     ("List", "רשימה"),
     ("Load mesh...", "טעינת רשת תלת־ממד..."),
     ("Material filters", "מסנני חומרים"),
+    ("Max", "מקסימום"),
+    ("Min", "מינימום"),
+    ("Min must not exceed Max.", "המינימום אינו יכול להיות גדול מהמקסימום."),
     ("Name", "שם"),
     ("New", "חדש"),
     ("New graph", "גרף חדש"),
@@ -160,6 +169,7 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Noises", "רעשים"),
     ("None", "ללא"),
     ("Normal", "רגיל"),
+    ("OK", "אישור"),
     ("Open", "פתיחה"),
     ("Open graph", "פתיחת גרף"),
     ("Open package...", "פתיחת חבילה..."),
@@ -232,6 +242,8 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Snap to grid", "הצמדה לרשת"),
     ("Specific parameters", "פרמטרים ייחודיים"),
     ("Start export", "התחלת ייצוא"),
+    ("Step", "צעד"),
+    ("Step must be greater than zero.", "גודל הצעד חייב להיות גדול מאפס."),
     ("Tags", "תגיות"),
     ("Template", "תבנית"),
     ("Templates", "תבניות"),
@@ -241,11 +253,13 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Tiling", "ריצוף"),
     ("Tools", "כלים"),
     ("Transforms", "טרנספורמציות"),
+    ("Type / Editor", "סוג / אופן עריכה"),
     ("Unbind", "ביטול קישור"),
     ("Undo", "ביטול פעולה"),
     ("Undo (Ctrl+Z)", "ביטול פעולה (Ctrl+Z)"),
     ("Undo history (steps)", "היסטוריית ביטול (פעולות)"),
     ("Use as result", "שימוש כתוצאה"),
+    ("Use letters, digits and underscores for the identifier.", "במזהה יש להשתמש באותיות לטיניות, בספרות ובקו תחתון בלבד."),
     ("User Data", "נתוני משתמש"),
     ("Variables", "משתנים"),
     ("Version", "גרסה"),
@@ -257,3 +271,33 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Windows", "חלונות"),
     ("Zoom the graph and the views", "שינוי התקריב של הגרף והתצוגות"),
 ];
+
+#[cfg(test)]
+mod expose_parameter_hebrew_tests {
+    use super::TABLE;
+
+    #[test]
+    fn exposed_parameter_dialog_has_hebrew_labels_and_validation_messages() {
+        const KEYS: &[&str] = &[
+            "Expose Parameter",
+            "Close expose parameter",
+            "Changes take effect when the graph input is created.",
+            "Type / Editor",
+            "Clamp",
+            "Limit values to Min and Max",
+            "Min",
+            "Max",
+            "OK",
+            "Step",
+            "An input already uses this identifier.",
+            "Min must not exceed Max.",
+            "Step must be greater than zero.",
+            "Use letters, digits and underscores for the identifier.",
+        ];
+        for key in KEYS {
+            let translated =
+                TABLE.iter().find(|(source, _)| source == key).map(|(_, value)| *value).unwrap_or_else(|| panic!("missing Hebrew dialog key: {key}"));
+            assert!(translated.chars().any(|ch| ('\u{0590}'..='\u{05ff}').contains(&ch)), "dialog text is not Hebrew: {key}");
+        }
+    }
+}
