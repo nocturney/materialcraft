@@ -163,6 +163,35 @@ mod tests {
     }
 
     #[test]
+    fn hebrew_home_preferences_and_file_warnings_are_localized() {
+        // These appear in Native Home, Preferences, graph editing and open/save feedback.
+        let essential = [
+            "Function Graph",
+            "Template",
+            "Package",
+            "Undo history (steps)",
+            "Preview size while editing",
+            "3D pan limit (mesh radii)",
+            "3D pan speed",
+            "Samples",
+            "Edit function graph...",
+            "function nodes",
+            "Bad function",
+            "Opened with",
+            "warnings: see the Console",
+            "Sent to TextureCraft: find it on the shelf under My smart materials",
+        ];
+        for source in essential {
+            let translated = he::TABLE
+                .iter()
+                .find(|(key, _)| *key == source)
+                .map(|(_, translated)| *translated)
+                .unwrap_or_else(|| panic!("missing Hebrew Native Home/Preferences translation: {source}"));
+            assert_ne!(translated, source, "untranslated Native Home/Preferences label: {source}");
+        }
+    }
+
+    #[test]
     fn arabic_table_has_no_duplicate_keys() {
         let mut seen = std::collections::HashSet::new();
         for (k, _) in ar::TABLE {
