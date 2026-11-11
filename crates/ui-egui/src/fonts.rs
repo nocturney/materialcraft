@@ -14,26 +14,19 @@ fn system_files(hebrew: bool) -> Vec<(std::path::PathBuf, u32)> {
     use std::path::PathBuf;
     let mut v: Vec<(PathBuf, u32)> = Vec::new();
     if cfg!(windows) {
-        let fonts = PathBuf::from(std::env::var("WINDIR").unwrap_or_else(|_| "C:\\Windows".into()))
-            .join("Fonts");
-        let files: &[&str] = if hebrew {
-            &["segoeui.ttf", "arial.ttf", "david.ttf", "tahoma.ttf"]
-        } else {
-            &["segoeui.ttf", "tahoma.ttf", "arial.ttf"]
-        };
+        let fonts = PathBuf::from(std::env::var("WINDIR").unwrap_or_else(|_| "C:\\Windows".into())).join("Fonts");
+        let files: &[&str] = if hebrew { &["segoeui.ttf", "arial.ttf", "david.ttf", "tahoma.ttf"] } else { &["segoeui.ttf", "tahoma.ttf", "arial.ttf"] };
         v.extend(files.iter().map(|f| (fonts.join(f), 0)));
     } else if cfg!(target_os = "macos") {
         let files: &[&str] = if hebrew {
             &[
                 "/System/Library/Fonts/SFHebrew.ttf",
+                "/System/Library/Fonts/ArialHB.ttc",
+                "/System/Library/Fonts/SFHebrewRounded.ttf",
                 "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
             ]
         } else {
-            &[
-                "/System/Library/Fonts/SFArabic.ttf",
-                "/System/Library/Fonts/Supplemental/GeezaPro.ttc",
-                "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
-            ]
+            &["/System/Library/Fonts/SFArabic.ttf", "/System/Library/Fonts/GeezaPro.ttc", "/System/Library/Fonts/Supplemental/Arial Unicode.ttf"]
         };
         v.extend(files.iter().map(|f| (PathBuf::from(f), 0)));
     } else {
@@ -93,21 +86,12 @@ impl UiFonts {
 
         let mut defs = crate::theme::font_definitions();
         let mut installed_any = false;
-        for (name, data) in [
-            ("script-Arab", self.arabic.as_ref()),
-            ("script-Hebr", self.hebrew.as_ref()),
-        ] {
+        for (name, data) in [("script-Arab", self.arabic.as_ref()), ("script-Hebr", self.hebrew.as_ref())] {
             if let Some(data) = data {
                 let name = name.to_string();
                 defs.font_data.insert(name.clone(), data.clone());
-                defs.families
-                    .entry(FontFamily::Proportional)
-                    .or_default()
-                    .push(name.clone());
-                defs.families
-                    .entry(FontFamily::Monospace)
-                    .or_default()
-                    .push(name);
+                defs.families.entry(FontFamily::Proportional).or_default().push(name.clone());
+                defs.families.entry(FontFamily::Monospace).or_default().push(name);
                 installed_any = true;
             }
         }
@@ -144,10 +128,23 @@ impl UiFonts {
             }
         }
         let name = if hebrew { "Hebrew" } else { "Arabic" };
-        log::warn!(
-            "no font found for {} UI text; system fonts may show boxes",
-            name
-        );
+        log::warn!("no font found for {} UI text; system fonts may show boxes", name);
         None
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod tests {
+    use super::{UiFonts, system_files};
+
+    #[test]
+    fn hebrew_native_font_fallback_loads_from_macos() {
+        let candidates = system_files(true);
+        assert!(candidates.iter().any(|(path, _)| path.ends_with("SFHebrew.ttf")));
+        assert!(candidates.iter().any(|(path, _)| path.ends_with("ArialHB.ttc")));
+
+        let mut fonts = UiFonts::default();
+        fonts.update(&egui::Context::default(), "he", false);
+        assert!(fonts.covers_hebrew(), "missing Hebrew system UI fallback");
     }
 }
