@@ -205,6 +205,45 @@ mod tests {
     }
 
     #[test]
+    fn hebrew_native_toolbar_file_export_and_failure_feedback_are_localized() {
+        // Actual tr() call-site labels on Native toolbars, file dialogs, and export views.
+        let essentials = [
+            "Engine",
+            "Export outputs... (Ctrl+Shift+E)",
+            "New graph... (Ctrl+N)",
+            "Open package... (Ctrl+O)",
+            "Redo (Ctrl+Y)",
+            "full size",
+            "threads",
+            "Not applied: the active graph or package changed while the file dialog was open",
+            "The file dialog could not be shown",
+            "placeholder node(s) stand in for nodes MaterialCraft doesn't have yet (see the warnings above)",
+            "Couldn't save",
+            "Download",
+            "Downloads the SBS and resources together in a ZIP.",
+            "MaterialCraft Project (*.mcraft)",
+            "SBS XML Package (*.sbs)",
+            ".mcmat export isn't available yet (#190)",
+            "Graph's size",
+            "MaterialX export isn't available yet (#190)",
+            "files",
+            "not available yet",
+            "Exported color space",
+            "This graph has no outputs",
+            "Tile 3x3",
+        ];
+        for key in essentials {
+            let value = he::TABLE
+                .iter()
+                .find(|(source, _)| *source == key)
+                .map(|(_, v)| *v)
+                .unwrap_or_else(|| panic!("missing Native Hebrew file/export label: {key}"));
+            assert_ne!(value, key, "untranslated Native file/export label: {key}");
+            assert!(value.chars().any(|c| ('א'..='ת').contains(&c)), "no Hebrew letters in {key}");
+        }
+    }
+
+    #[test]
     fn arabic_table_has_no_duplicate_keys() {
         let mut seen = std::collections::HashSet::new();
         for (k, _) in ar::TABLE {
