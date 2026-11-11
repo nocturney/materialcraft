@@ -78,6 +78,7 @@ fn read_capped_bounds_size_and_kind() {
     let file = dir.join("f.bin");
     std::fs::write(&file, b"12345").unwrap();
     assert_eq!(read_capped(&file, 5).unwrap(), b"12345");
+    assert_eq!(read_capped(&file, u64::MAX).unwrap(), b"12345", "an unbounded cap must not overflow");
     assert!(read_capped(&file, 4).is_err());
     assert!(read_capped(&dir, 100).is_err(), "directories are not regular files");
     let _ = std::fs::remove_dir_all(&dir);

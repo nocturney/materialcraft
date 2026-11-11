@@ -40,7 +40,7 @@ pub fn read_capped(path: impl AsRef<std::path::Path>, max: u64) -> Result<Vec<u8
     }
 
     let mut bytes = Vec::with_capacity(len as usize);
-    file.take(max + 1).read_to_end(&mut bytes).map_err(io)?;
+    file.take(max.saturating_add(1)).read_to_end(&mut bytes).map_err(io)?;
     if bytes.len() as u64 > max {
         return Err(FormatError::Io(format!("{}: file is larger than {max} bytes", path.display())));
     }
