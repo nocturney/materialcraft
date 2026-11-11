@@ -24,8 +24,11 @@ pub struct Language {
 
 const COUNT: usize = 3;
 
-pub static LANGUAGES: [Language; COUNT] =
-    [Language { code: "en", name: "English", english: "English", table: &[] }, Language { code: "ar", name: "العربية", english: "Arabic", table: ar::TABLE }, Language { code: "he", name: "עברית", english: "Hebrew", table: he::TABLE }];
+pub static LANGUAGES: [Language; COUNT] = [
+    Language { code: "en", name: "English", english: "English", table: &[] },
+    Language { code: "ar", name: "العربية", english: "Arabic", table: ar::TABLE },
+    Language { code: "he", name: "עברית", english: "Hebrew", table: he::TABLE },
+];
 
 static MAPS: [OnceLock<HashMap<&'static str, &'static str>>; COUNT] = [const { OnceLock::new() }; COUNT];
 static CURRENT: AtomicUsize = AtomicUsize::new(0);
@@ -140,6 +143,22 @@ mod tests {
             kp.sort();
             vp.sort();
             assert_eq!(kp, vp, "mismatched placeholders in {k:?} vs {v:?}");
+        }
+    }
+
+    #[test]
+    fn hebrew_main_menus_and_file_workflow_are_localized() {
+        // Prevent untranslated top-level menus and primary file actions
+        // from slipping back into the Native Hebrew UI.
+        let essential =
+            ["File", "Edit", "Tools", "Windows", "Help", "Open...", "Save", "Save as...", "Preferences...", "Snap to grid", "Import vector graphics..."];
+        for source in essential {
+            let translated = he::TABLE
+                .iter()
+                .find(|(key, _)| *key == source)
+                .map(|(_, translated)| *translated)
+                .unwrap_or_else(|| panic!("missing Hebrew menu translation: {source}"));
+            assert_ne!(translated, source, "untranslated Native menu item: {source}");
         }
     }
 
