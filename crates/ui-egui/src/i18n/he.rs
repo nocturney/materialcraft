@@ -165,7 +165,7 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Random seed", "ערך התחלתי אקראי"),
     ("Recent", "אחרונים"),
     ("Recent packages", "חבילות אחרונות"),
-    ("Redo", "ביצוע חוזר"),
+    ("Redo", "ביצוע מחדש"),
     ("Reload resources", "טעינה מחדש של משאבים"),
     ("Render time", "זמן עיבוד"),
     ("Renderer", "מנוע עיבוד"),
