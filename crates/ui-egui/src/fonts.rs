@@ -14,7 +14,8 @@ fn system_files(hebrew: bool) -> Vec<(std::path::PathBuf, u32)> {
     use std::path::PathBuf;
     let mut v: Vec<(PathBuf, u32)> = Vec::new();
     if cfg!(windows) {
-        let fonts = PathBuf::from(std::env::var("WINDIR").unwrap_or_else(|_| "C:\\Windows".into())).join("Fonts");
+        let fonts = PathBuf::from(std::env::var("WINDIR").unwrap_or_else(|_| "C:\\Windows".into()))
+            .join("Fonts");
         let files: &[&str] = if hebrew {
             &["segoeui.ttf", "arial.ttf", "david.ttf", "tahoma.ttf"]
         } else {
@@ -92,12 +93,21 @@ impl UiFonts {
 
         let mut defs = crate::theme::font_definitions();
         let mut installed_any = false;
-        for (name, data) in [("script-Arab", self.arabic.as_ref()), ("script-Hebr", self.hebrew.as_ref())] {
+        for (name, data) in [
+            ("script-Arab", self.arabic.as_ref()),
+            ("script-Hebr", self.hebrew.as_ref()),
+        ] {
             if let Some(data) = data {
                 let name = name.to_string();
                 defs.font_data.insert(name.clone(), data.clone());
-                defs.families.entry(FontFamily::Proportional).or_default().push(name.clone());
-                defs.families.entry(FontFamily::Monospace).or_default().push(name);
+                defs.families
+                    .entry(FontFamily::Proportional)
+                    .or_default()
+                    .push(name.clone());
+                defs.families
+                    .entry(FontFamily::Monospace)
+                    .or_default()
+                    .push(name);
                 installed_any = true;
             }
         }
@@ -119,7 +129,9 @@ impl UiFonts {
     fn load_system(hebrew: bool) -> Option<Arc<FontData>> {
         #[cfg(not(target_arch = "wasm32"))]
         for (path, index) in system_files(hebrew) {
-            let Ok(meta) = std::fs::metadata(&path) else { continue };
+            let Ok(meta) = std::fs::metadata(&path) else {
+                continue;
+            };
             if !meta.is_file() || meta.len() == 0 || meta.len() > (128 << 20) {
                 continue;
             }
@@ -132,7 +144,10 @@ impl UiFonts {
             }
         }
         let name = if hebrew { "Hebrew" } else { "Arabic" };
-        log::warn!("no font found for {} UI text; system fonts may show boxes", name);
+        log::warn!(
+            "no font found for {} UI text; system fonts may show boxes",
+            name
+        );
         None
     }
 }
