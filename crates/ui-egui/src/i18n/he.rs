@@ -84,6 +84,7 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Dark", "כהה"),
     ("Default", "ברירת מחדל"),
     ("Delete and relink", "מחיקה וחיבור מחדש"),
+    ("Discard", "לא לשמור"),
     ("Delete", "מחיקה"),
     ("Delete input", "מחיקת קלט"),
     ("Delete preset", "מחיקת הגדרה קבועה מראש"),
@@ -230,6 +231,7 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Samples", "דוגמאות"),
     ("Save", "שמירה"),
     ("Save (Ctrl+S)", "שמירה (Ctrl+S)"),
+    ("Save changes to", "לשמור שינויים בקובץ"),
     ("Save as...", "שמירה בשם..."),
     ("Save image...", "שמירת תמונה..."),
     ("Save package", "שמירת חבילה"),
@@ -267,6 +269,7 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Transforms", "טרנספורמציות"),
     ("Type / Editor", "סוג / אופן עריכה"),
     ("Unbind", "ביטול קישור"),
+    ("Unsaved changes", "שינויים שלא נשמרו"),
     ("Undo", "ביטול פעולה"),
     ("Undo (Ctrl+Z)", "ביטול פעולה (Ctrl+Z)"),
     ("Undo history (steps)", "היסטוריית ביטול (פעולות)"),
@@ -281,6 +284,7 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Welcome to MaterialCraft", "ברוכים הבאים ל־MaterialCraft"),
     ("Width", "רוחב"),
     ("Windows", "חלונות"),
+    ("Your changes will be lost if you don't save them.", "השינויים יאבדו אם לא יישמרו."),
     ("Zoom the graph and the views", "שינוי התקריב של הגרף והתצוגות"),
 ];
 
