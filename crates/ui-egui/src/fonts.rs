@@ -38,6 +38,7 @@ fn system_files(hebrew: bool) -> Vec<(std::path::PathBuf, u32)> {
                 "/usr/local/share/fonts/noto/NotoSansHebrew-Regular.ttf",
                 "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
                 "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+                "/usr/local/share/fonts/dejavu/DejaVuSans.ttf",
             ]
         } else {
             &[
