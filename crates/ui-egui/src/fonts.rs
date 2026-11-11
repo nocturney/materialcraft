@@ -171,3 +171,42 @@ mod locale_tests {
         assert!(!matches_language("ar-EG", "he"));
     }
 }
+
+#[cfg(all(test, target_os = "macos"))]
+mod language_switch_tests {
+    use super::UiFonts;
+    use std::sync::Arc;
+
+    #[test]
+    fn switching_languages_preserves_both_script_faces() {
+        let ctx = egui::Context::default();
+        let mut fonts = UiFonts::default();
+
+        // English alone should not force loading either system script.
+        fonts.update(&ctx, "en-US", false);
+        assert!(!fonts.covers_arabic());
+        assert!(!fonts.covers_hebrew());
+
+        fonts.update(&ctx, "ar-EG", false);
+        assert!(fonts.covers_arabic());
+        assert!(!fonts.covers_hebrew());
+        let first_arabic = fonts.arabic.as_ref().unwrap().clone();
+
+        fonts.update(&ctx, "he-IL", false);
+        assert!(fonts.covers_hebrew());
+        assert!(fonts.covers_arabic());
+        let first_hebrew = fonts.hebrew.as_ref().unwrap().clone();
+        assert!(Arc::ptr_eq(&first_arabic, fonts.arabic.as_ref().unwrap()));
+
+        // A non-RTL language must not discard previously loaded fallback faces.
+        fonts.update(&ctx, "en-US", false);
+        assert!(Arc::ptr_eq(&first_arabic, fonts.arabic.as_ref().unwrap()));
+        assert!(Arc::ptr_eq(&first_hebrew, fonts.hebrew.as_ref().unwrap()));
+
+        // Before choosing a script, the language picker must show both names.
+        let mut picker_fonts = UiFonts::default();
+        picker_fonts.update(&egui::Context::default(), "en-US", true);
+        assert!(picker_fonts.covers_hebrew());
+        assert!(picker_fonts.covers_arabic());
+    }
+}
