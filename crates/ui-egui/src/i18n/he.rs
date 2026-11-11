@@ -28,8 +28,14 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Apply", "החלה"),
     ("As JSON", "כ־JSON"),
     ("Attributes", "מאפיינים"),
-    ("Automatic export when outputs change", "ייצוא אוטומטי כאשר הפלטים משתנים"),
-    ("Autosave every (minutes, 0 = off)", "שמירה אוטומטית בכל (דקות, 0 = כבוי)"),
+    (
+        "Automatic export when outputs change",
+        "ייצוא אוטומטי כאשר הפלטים משתנים",
+    ),
+    (
+        "Autosave every (minutes, 0 = off)",
+        "שמירה אוטומטית בכל (דקות, 0 = כבוי)",
+    ),
     ("Base parameters", "פרמטרים בסיסיים"),
     ("Batch", "אצווה"),
     ("Bit depth", "עומק סיביות"),
@@ -39,7 +45,10 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Cache", "מטמון"),
     ("Camera", "מצלמה"),
     ("Cancel", "ביטול"),
-    ("Check at least one output to export", "יש לבחור לפחות פלט אחד לייצוא"),
+    (
+        "Check at least one output to export",
+        "יש לבחור לפחות פלט אחד לייצוא",
+    ),
     ("Check for updates...", "בדיקת עדכונים..."),
     ("Choose a folder to export to", "בחירת תיקיית יעד לייצוא"),
     ("Choose...", "בחירה..."),
@@ -206,5 +215,8 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Version", "גרסה"),
     ("View in 2D view", "הצגה בתצוגת הדו־ממד"),
     ("Welcome to MaterialCraft", "ברוכים הבאים ל־MaterialCraft"),
-    ("Zoom the graph and the views", "שינוי התקריב של הגרף והתצוגות"),
+    (
+        "Zoom the graph and the views",
+        "שינוי התקריב של הגרף והתצוגות",
+    ),
 ];
