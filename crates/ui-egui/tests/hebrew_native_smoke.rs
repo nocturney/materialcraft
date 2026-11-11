@@ -69,6 +69,17 @@ fn round_trip(dir: &std::path::Path) -> MaterialCraftApp {
 }
 
 #[test]
+fn native_round_trip_directory_is_unique_and_cleaned_up() {
+    let first = RoundTripDir::new();
+    let first_path = first.path().to_path_buf();
+    let second = RoundTripDir::new();
+    assert_ne!(first.path(), second.path());
+    assert!(first_path.is_dir());
+    drop(first);
+    assert!(!first_path.exists(), "round-trip fixture must be removed");
+}
+
+#[test]
 fn hebrew_native_open_save_round_trip() {
     let dir = RoundTripDir::new();
     let _app = round_trip(dir.path());
