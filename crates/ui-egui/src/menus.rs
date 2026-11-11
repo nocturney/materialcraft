@@ -306,42 +306,59 @@ pub fn menu_bar(app: &mut MaterialCraftApp, ui: &mut egui::Ui) {
             if let Some(layout) = &window_layout {
                 crate::window_controls::buttons(ui, &context, &layout.left);
             }
-            for top in TOP {
-                ui.menu_button(tr(top), |ui| {
-                    ui.set_min_width(220.0);
-                    let mut current_submenu: Option<&str> = None;
-                    let items: Vec<MenuItem> = CATALOG.iter().filter(|item| item.menu == top).copied().collect();
-                    for item in &items {
-                        if let Some(submenu) = item.sub {
-                            if current_submenu == Some(submenu) {
+            // Native title-bar buttons stay on their OS side. Only the menu
+            // headings follow the locale's reading direction.
+            let mut draw_menus = |ui: &mut egui::Ui| {
+                for top in TOP {
+                    ui.menu_button(tr(top), |ui| {
+                        ui.set_min_width(220.0);
+                        let mut current_submenu: Option<&str> = None;
+                        let items: Vec<MenuItem> = CATALOG.iter().filter(|item| item.menu == top).copied().collect();
+                        for item in &items {
+                            if let Some(submenu) = item.sub {
+                                if current_submenu == Some(submenu) {
+                                    continue;
+                                }
+
+                                current_submenu = Some(submenu);
+                                ui.menu_button(menu_label(tr(submenu)), |ui| {
+                                    for entry in items.iter().filter(|entry| entry.sub == Some(submenu)) {
+                                        menu_item(app, &context, ui, entry);
+                                    }
+                                });
                                 continue;
                             }
 
-                            current_submenu = Some(submenu);
-                            ui.menu_button(menu_label(tr(submenu)), |ui| {
-                                for entry in items.iter().filter(|entry| entry.sub == Some(submenu)) {
-                                    menu_item(app, &context, ui, entry);
-                                }
-                            });
-                            continue;
-                        }
+                            if item.label == "-" {
+                                ui.separator();
+                                continue;
+                            }
 
-                        if item.label == "-" {
-                            ui.separator();
-                            continue;
+                            menu_item(app, &context, ui, item);
                         }
-
-                        menu_item(app, &context, ui, item);
-                    }
-                });
-            }
-            #[cfg(not(target_arch = "wasm32"))]
-            if let Some(layout) = window_layout.as_ref().filter(|layout| !layout.right.is_empty()) {
+                    });
+                }
+            };
+            if crate::i18n::is_rtl() {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let mut right = layout.right.clone();
-                    right.reverse();
-                    crate::window_controls::buttons(ui, &context, &right);
+                    #[cfg(not(target_arch = "wasm32"))]
+                    if let Some(layout) = window_layout.as_ref().filter(|layout| !layout.right.is_empty()) {
+                        let mut right = layout.right.clone();
+                        right.reverse();
+                        crate::window_controls::buttons(ui, &context, &right);
+                    }
+                    draw_menus(ui);
                 });
+            } else {
+                draw_menus(ui);
+                #[cfg(not(target_arch = "wasm32"))]
+                if let Some(layout) = window_layout.as_ref().filter(|layout| !layout.right.is_empty()) {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let mut right = layout.right.clone();
+                        right.reverse();
+                        crate::window_controls::buttons(ui, &context, &right);
+                    });
+                }
             }
         });
     });
@@ -724,6 +741,29 @@ mod tests {
         app.ui.windows.shortcuts = true;
         dispatched(egui::Key::N, egui::Modifiers::COMMAND, &mut app);
         assert!(app.ui.windows.new_graph);
+    }
+
+    /// In Hebrew the File menu starts from the right edge; English keeps
+    /// the existing left-to-right order. AccessKit reports actual UI bounds.
+    #[test]
+    fn hebrew_top_level_menus_are_right_to_left() {
+        use egui_kittest::kittest::{By, Queryable};
+        let mut app = app();
+        app.ui.prefs.language = "he".to_owned();
+        crate::i18n::set_language("he");
+        // The geometry test runs in CI without OS Hebrew fonts; native glyph
+        // coverage is tested separately with the system-font fallback.
+        let mut harness = egui_kittest::Harness::builder()
+            .with_size(egui::vec2(900.0, 120.0))
+            .allow_missing_glyphs()
+            .build_ui_state(|ui, app: &mut MaterialCraftApp| menu_bar(app, ui), app);
+        harness.run_steps(3);
+        let query = |label| By::new().role(egui::accesskit::Role::Button).label(label);
+        let file_x = harness.get(query("קובץ")).rect().center().x;
+        let help_x = harness.get(query("עזרה")).rect().center().x;
+        assert!(file_x > help_x, "Hebrew top menus did not reverse: File={file_x}, Help={help_x}");
+        assert!(file_x > 450.0, "Hebrew File menu not anchored to the right: {file_x}");
+        crate::i18n::set_language("en");
     }
 
     #[test]
