@@ -163,7 +163,7 @@ impl ExposeParameterDialog {
             ui.horizontal(|ui| {
                 ui.add_enabled(
                     false,
-                    egui::Button::new(ValueType::of(&self.input.default).map_or("Value", ValueType::label)).min_size(egui::vec2(160.0, 24.0)),
+                    egui::Button::new(tr(ValueType::of(&self.input.default).map_or("Value", ValueType::label))).min_size(egui::vec2(160.0, 24.0)),
                 );
                 let selected = self.input.editor();
                 let response = egui::ComboBox::from_id_salt("expose-editor").selected_text(tr(selected.label())).width(200.0).show_ui(ui, |ui| {

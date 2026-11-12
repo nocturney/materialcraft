@@ -136,6 +136,21 @@ mod tests {
     }
 
     #[test]
+    fn hebrew_expose_parameter_type_selector_is_localized() {
+        use materialcraft_engine::core::ValueType;
+
+        for value_type in ValueType::ALL {
+            let source = value_type.label();
+            let translated = he::TABLE
+                .iter()
+                .find(|(key, _)| *key == source)
+                .map(|(_, value)| *value)
+                .unwrap_or_else(|| panic!("Missing Hebrew exposed parameter type: {source}"));
+            assert_ne!(translated, source, "Untranslated exposed parameter type: {source}");
+            assert!(translated.chars().any(|c| ('\u{0590}'..='\u{05FF}').contains(&c)));
+        }
+    }
+    #[test]
     fn hebrew_placeholders_match_source() {
         for (k, v) in he::TABLE {
             let mut kp: Vec<&str> = k.split('{').skip(1).filter_map(|s| s.split_once('}').map(|(p, _)| p)).collect();
