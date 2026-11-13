@@ -9,17 +9,17 @@ mod material_tab;
 mod outputs;
 
 pub use export_format::ExportFormat;
-pub use export_settings::{output_key, BatchExportSettings, ExportSettings, ExportTab};
+pub use export_settings::{BatchExportSettings, ExportSettings, ExportTab, output_key};
 pub use material_export_settings::{ExposedControls, MaterialExportSettings, NormalOrientation, TextureDepth};
 
-use egui::{vec2, RichText, Ui};
+use egui::{RichText, Ui, vec2};
 use egui_phosphor::regular as icon;
 use materialcraft_engine::core::Graph;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
+use crate::MaterialCraftApp;
 use crate::i18n::tr;
 use crate::theme::Tokens;
-use crate::MaterialCraftApp;
 
 /// Output sizes the size lists offer; 0 keeps the graph's size
 const SIZES: [u32; 7] = [0, 256, 512, 1024, 2048, 4096, 8192];
@@ -29,11 +29,7 @@ const PATTERNS: [&str; 3] = ["$(graph)_$(identifier)", "$(identifier)", "$(graph
 
 /// Put the leading export control on the right in Hebrew while leaving English LTR.
 fn with_export_row<R>(ui: &mut Ui, rtl: bool, add_contents: impl FnOnce(&mut Ui) -> R) -> egui::InnerResponse<R> {
-    if rtl {
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), add_contents)
-    } else {
-        ui.horizontal(add_contents)
-    }
+    if rtl { ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), add_contents) } else { ui.horizontal(add_contents) }
 }
 
 /// What the window's buttons asked for this frame
