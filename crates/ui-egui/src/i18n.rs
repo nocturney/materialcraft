@@ -33,8 +33,15 @@ pub static LANGUAGES: [Language; COUNT] = [
 static MAPS: [OnceLock<HashMap<&'static str, &'static str>>; COUNT] = [const { OnceLock::new() }; COUNT];
 static CURRENT: AtomicUsize = AtomicUsize::new(0);
 
+// Old Windows and Android locales can still use `iw` for Hebrew.
+// Normalize that legacy tag before language selection or direction lookup.
+fn canonical_language_code(code: &str) -> &str {
+    if code.eq_ignore_ascii_case("iw") { "he" } else { code }
+}
+
 /// Switch the UI language (unknown codes fall back to English).
 pub fn set_language(code: &str) {
+    let code = canonical_language_code(code);
     CURRENT.store(LANGUAGES.iter().position(|l| l.code == code).unwrap_or(0), Ordering::Relaxed);
 }
 
@@ -45,7 +52,7 @@ pub fn current() -> &'static Language {
 
 /// Returns true if `code` is a right-to-left language (e.g. Arabic `"ar"`).
 pub fn is_rtl_code(code: &str) -> bool {
-    craft_ui::direction::resolve(code, craft_ui::direction::Setting::Language) == craft_ui::direction::Direction::Rtl
+    craft_ui::direction::resolve(canonical_language_code(code), craft_ui::direction::Setting::Language) == craft_ui::direction::Direction::Rtl
 }
 
 /// Returns true if the current UI language is right-to-left.
@@ -95,7 +102,7 @@ pub fn trf(template: &str, args: &[(&str, &dyn Display)]) -> String {
 /// The supported language for a locale such as "ar-EG", "ar-SA" ("en" when none matches).
 pub fn language_for_locale(locale: &str) -> &'static str {
     let lang = locale.split(['-', '_', '.', '@']).next().unwrap_or("").to_ascii_lowercase();
-    match lang.as_str() {
+    match canonical_language_code(lang.as_str()) {
         "ar" => "ar",
         l => LANGUAGES.iter().find(|x| x.code == l).map_or("en", |x| x.code),
     }
@@ -122,7 +129,12 @@ mod tests {
         assert_eq!(language_for_locale("he"), "he");
         assert_eq!(language_for_locale("he-IL"), "he");
         assert_eq!(language_for_locale("he_IL.UTF-8"), "he");
+        assert_eq!(language_for_locale("iw"), "he");
+        assert_eq!(language_for_locale("iw-IL"), "he");
+        assert_eq!(language_for_locale("iw_IL.UTF-8"), "he");
+        assert_eq!(canonical_language_code("IW"), "he");
         assert!(is_rtl_code("he"));
+        assert!(is_rtl_code("iw"));
         assert_eq!(language_for_locale("en-US"), "en");
         assert_eq!(language_for_locale("fr-FR"), "en");
     }
