@@ -55,6 +55,10 @@ fn round_trip(dir: &std::path::Path) -> MaterialCraftApp {
     writer.run("file.saveAs", json!({"path": path})).expect("save Hebrew-named package");
     assert!(path.is_file(), "the native save must produce an actual package");
 
+    // Close the writer before reopening, so this cannot pass by sharing
+    // the same app state or an open writer-side file handle.
+    drop(writer);
+
     // Open the saved document in a fresh app instance, avoiding a false
     // positive from in-memory state in the writer.
     let mut reader = hebrew_app();
@@ -62,6 +66,15 @@ fn round_trip(dir: &std::path::Path) -> MaterialCraftApp {
     assert_eq!(reader.session.pkg.name, "בדיקת שמירה בעברית");
     assert_eq!(reader.ui.prefs.language, "he");
     assert_eq!(i18n::current().code, "he");
+
+    // Preserve a synthetic file artifact alongside an opt-in screenshot.
+    // The normal test still cleans up its disposable working directory.
+    if let Some(output_dir) = std::env::var_os("MC_SNAPSHOT_DIR") {
+        std::fs::create_dir_all(&output_dir).expect("create proof output directory");
+        let proof = std::path::PathBuf::from(output_dir).join("materialcraft-hebrew-native-roundtrip.sbs");
+        std::fs::copy(&path, &proof).expect("copy synthetic round-trip proof");
+        assert!(proof.metadata().expect("saved round-trip proof").len() > 100);
+    }
     reader
 }
 
