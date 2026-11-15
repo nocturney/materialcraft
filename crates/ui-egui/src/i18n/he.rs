@@ -429,6 +429,11 @@ pub const TABLE: &[(&str, &str)] = &[
     ("String", "מחרוזת"),
     ("Variable name", "שם המשתנה"),
     ("View output in 2D view", "הצגת הפלט בתצוגת דו־ממד"),
+    // Native Preferences: source-backed preview cache controls.
+    ("Library preview cache", "מטמון התצוגות המקדימות בספרייה"),
+    ("Disk limit (MiB, 0 = off)", "מגבלת נפח בדיסק (MiB, 0 = כבוי)"),
+    ("Maximum stored previews", "מספר מרבי של תצוגות מקדימות שמורות"),
+    ("Previews rebuild as they come into view.", "התצוגות המקדימות נבנות מחדש כשהן מוצגות."),
 ];
 
 #[cfg(test)]
@@ -636,6 +641,28 @@ mod hebrew_view3d_material_export_tests {
             let matches: Vec<_> = TABLE.iter().filter(|(source, _)| source == key).collect();
             assert_eq!(matches.len(), 1, "missing/duplicate Hebrew key: {key}");
             assert!(matches[0].1.chars().any(|c| ('\u{0590}'..='\u{05ff}').contains(&c)), "translation is not Hebrew: {key}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod hebrew_library_preview_cache_controls_test {
+    use super::TABLE;
+
+    #[test]
+    fn native_preferences_preview_cache_controls_are_hebrew() {
+        let source = include_str!("../windows.rs");
+        const KEYS: &[&str] = &[
+            "Library preview cache",
+            "Disk limit (MiB, 0 = off)",
+            "Maximum stored previews",
+            "Previews rebuild as they come into view.",
+        ];
+        for key in KEYS {
+            assert!(source.contains(&format!("tr({key:?})")), "not a live Native Preferences key: {key}");
+            let matches: Vec<_> = TABLE.iter().filter(|(source, _)| source == key).collect();
+            assert_eq!(matches.len(), 1, "missing or duplicate Hebrew Preferences key: {key}");
+            assert!(matches[0].1.chars().any(|c| ('\u{0590}'..='\u{05ff}').contains(&c)), "translation lacks Hebrew letters: {key}");
         }
     }
 }
