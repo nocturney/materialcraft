@@ -29,7 +29,7 @@ pub(super) fn show(app: &mut MaterialCraftApp, ui: &mut Ui, node: &materialcraft
     if let Some(definition) = definition
         && !definition.description.is_empty()
     {
-        ui.label(RichText::new(definition.description).size(11.0).color(tokens.text_dim));
+        ui.label(RichText::new(tr(definition.description)).size(11.0).color(tokens.text_dim));
     }
     if let Some(response) = app.session.cooked.nodes.get(&node.id)
         && let Some(entry) = &response.error

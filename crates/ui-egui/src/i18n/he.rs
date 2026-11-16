@@ -438,6 +438,13 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Disk limit (MiB, 0 = off)", "מגבלת נפח בדיסק (MiB, 0 = כבוי)"),
     ("Maximum stored previews", "מספר מרבי של תצוגות מקדימות שמורות"),
     ("Previews rebuild as they come into view.", "התצוגות המקדימות נבנות מחדש כשהן מוצגות."),
+    ("Gaussian blur.", "טשטוש גאוסי."),
+    ("Blends a foreground over a background with a blending mode, weighted by opacity and an optional mask.", "ממזג את שכבת החזית עם הרקע לפי מצב המיזוג, תוך שקלול האטימות ומסכה אופציונלית."),
+    ("An output of the graph: a material channel (usage) or any image.", "פלט הגרף: ערוץ חומר (ייעוד) או תמונה מכל סוג."),
+    ("Remaps the input range, midtones and output range.", "ממפה מחדש את טווח הקלט, גוני הביניים וטווח הפלט."),
+    ("Transforms the input with an offset and a 2 by 2 matrix.", "מבצע התמרה לקלט באמצעות היסט ומטריצה בגודל 2×2."),
+    ("Maps grayscale values to colors along a gradient.", "ממפה ערכי גוני אפור לצבעים לאורך מעבר צבע."),
+    ("Unsharp mask.", "מסכת חידוד."),
 ];
 
 #[cfg(test)]
@@ -691,6 +698,31 @@ mod hebrew_value_input_editor_tests {
                 matches[0].1.chars().any(|c| ('\u{0590}'..='\u{05ff}').contains(&c)),
                 "not Hebrew: {key}"
             );
+        }
+    }
+}
+
+#[cfg(test)]
+mod hebrew_native_node_description_tests {
+    use super::TABLE;
+
+    #[test]
+    fn inspector_node_descriptions_are_source_keyed_and_translated() {
+        let native_inspector = include_str!("../property/node.rs");
+        assert!(native_inspector.contains("RichText::new(tr(definition.description))"), "Inspector must translate the original node description at presentation only");
+        const SOURCE_DESCRIPTIONS: &[&str] = &[
+            "Gaussian blur.",
+            "Blends a foreground over a background with a blending mode, weighted by opacity and an optional mask.",
+            "An output of the graph: a material channel (usage) or any image.",
+            "Remaps the input range, midtones and output range.",
+            "Transforms the input with an offset and a 2 by 2 matrix.",
+            "Maps grayscale values to colors along a gradient.",
+            "Unsharp mask.",
+        ];
+        for english in SOURCE_DESCRIPTIONS {
+            let matches: Vec<_> = TABLE.iter().filter(|(key, _)| key == english).collect();
+            assert_eq!(matches.len(), 1, "Hebrew description missing or duplicated: {english}");
+            assert!(matches[0].1.chars().any(|ch| ('\u{0590}'..='\u{05ff}').contains(&ch)), "Not Hebrew: {english}");
         }
     }
 }
