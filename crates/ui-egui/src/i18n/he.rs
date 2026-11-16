@@ -25,6 +25,7 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Add node", "הוספת צומת"),
     ("Add to Favorites", "הוספה למועדפים"),
     ("Add to graph", "הוספה לגרף"),
+    ("Add value input", "הוספת קלט ערך"),
     ("Align centers horizontally", "יישור מרכזים אופקית"),
     ("Align centers vertically", "יישור מרכזים אנכית"),
     ("Align left", "יישור לשמאל"),
@@ -250,6 +251,7 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Redo (Ctrl+Y)", "ביצוע חוזר (Ctrl+Y)"),
     ("Reload library", "טעינת הספרייה מחדש"),
     ("Reload resources", "טעינה מחדש של משאבים"),
+    ("Remove", "הסרה"),
     ("Remove from Favorites", "הסרה מהמועדפים"),
     ("Render time", "זמן עיבוד"),
     ("Renderer", "מנוע עיבוד"),
@@ -323,6 +325,8 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Use as result", "שימוש כתוצאה"),
     ("Use letters, digits and underscores for the identifier.", "במזהה יש להשתמש באותיות לטיניות, בספרות ובקו תחתון בלבד."),
     ("User Data", "נתוני משתמש"),
+    ("Value inputs", "קלטי ערך"),
+    ("Value type", "סוג ערך"),
     ("Variables", "משתנים"),
     ("Version", "גרסה"),
     ("View in 2D view", "הצגה בתצוגת הדו־ממד"),
@@ -663,6 +667,30 @@ mod hebrew_library_preview_cache_controls_test {
             let matches: Vec<_> = TABLE.iter().filter(|(source, _)| source == key).collect();
             assert_eq!(matches.len(), 1, "missing or duplicate Hebrew Preferences key: {key}");
             assert!(matches[0].1.chars().any(|c| ('\u{0590}'..='\u{05ff}').contains(&c)), "translation lacks Hebrew letters: {key}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod hebrew_value_input_editor_tests {
+    use super::TABLE;
+
+    #[test]
+    fn native_value_input_controls_use_hebrew_labels_without_changing_value_types() {
+        // Exact live Native UI strings, not engine ValueType labels or saved action parameters.
+        let source = include_str!("../value_input_editor.rs");
+        const KEYS: &[&str] = &["Value inputs", "Remove", "Add value input", "Value type"];
+        for key in KEYS {
+            assert!(
+                source.contains(&format!("tr({key:?})")),
+                "missing live Native tr() callsite: {key}"
+            );
+            let matches: Vec<_> = TABLE.iter().filter(|(english, _)| english == key).collect();
+            assert_eq!(matches.len(), 1, "missing or duplicate Hebrew value-input label: {key}");
+            assert!(
+                matches[0].1.chars().any(|c| ('\u{0590}'..='\u{05ff}').contains(&c)),
+                "not Hebrew: {key}"
+            );
         }
     }
 }
