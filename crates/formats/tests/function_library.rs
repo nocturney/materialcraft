@@ -161,14 +161,21 @@ fn bundled_library_has_complete_bodies_and_current_export_metadata() {
     let bytes = include_bytes!("../../../assets/sbs/functions.sbs");
     let read = read_sbs(bytes, "functions.sbs", &|_| None).unwrap();
     let xml = roxmltree::Document::parse(std::str::from_utf8(bytes).unwrap()).unwrap();
-    let version = xml.descendants().find(|element| element.has_tag_name("updaterVersion")).unwrap().attribute("v").unwrap();
 
-    assert_eq!(version, env!("CARGO_PKG_VERSION"));
+    // The SBS schema version is independent of the MaterialCraft release version
+    for (field, expected) in [("formatVersion", "1.1.0.202401"), ("updaterVersion", env!("CARGO_PKG_VERSION"))] {
+        let version = xml.root_element().children().find(|element| element.has_tag_name(field)).unwrap().attribute("v").unwrap();
+
+        assert_eq!(version, expected, "bundled functions {field}");
+    }
+
     assert!(read.warnings.is_empty(), "{:?}", read.warnings);
     assert_eq!(read.pkg.graphs.len(), 171);
     assert_eq!(read.pkg.graphs.iter().flat_map(|graph| graph.functions()).map(|function| function.nodes.len()).sum::<usize>(), 2334);
+
     for graph in &read.pkg.graphs {
         let function = graph.function.as_ref().unwrap();
+
         assert!(function.output.is_some(), "{}", graph.sbs_path());
         assert!(function.nodes.iter().all(|node| node.missing.is_none()), "{}", graph.sbs_path());
         assert!(!graph.attributes.description.is_empty());
@@ -176,15 +183,19 @@ fn bundled_library_has_complete_bodies_and_current_export_metadata() {
         assert!(graph.frames.is_empty() && graph.comments.is_empty() && graph.pins.is_empty());
     }
     let pi = &read.pkg.graph_by_name("Functions/Math/Pi").unwrap().1.attributes;
+
     assert!(pi.category.is_empty());
     assert_eq!(pi.tags, "Constant");
+
     let saved = write_sbs(&read.pkg).unwrap();
     let reopened = read_sbs(&saved, "functions.sbs", &|_| None).unwrap();
     for graph in &read.pkg.graphs {
         let reloaded = reopened.pkg.graph_by_name(&graph.sbs_path()).unwrap().1;
+
         assert_eq!(reloaded.attributes.category, graph.attributes.category);
         assert_eq!(reloaded.attributes.tags, graph.attributes.tags);
     }
+
     assert!(!xml.descendants().any(|element| element.has_tag_name("icon")));
 }
 

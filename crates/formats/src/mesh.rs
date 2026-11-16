@@ -1,7 +1,8 @@
 //! Meshes for the 3D view: OBJ and glTF/GLB (self-contained: embedded or data-URI buffers),
-//! normalized to fit a unit sphere at the origin, with normals, tangents and (when the file has
-//! none) generated UVs.
+//! read with craft-mesh, placed by their node hierarchy, then normalized to fit a unit sphere at
+//! the origin, with normals, tangents and (when the file has none) generated UVs.
 
+use craft_mesh::{Limits, Scene};
 use materialcraft_geom::Mesh;
 use materialcraft_geom::glam::{Vec2, Vec3};
 
@@ -16,58 +17,15 @@ const MAX_TRIANGLES: usize = 4_000_000;
 /// Largest mesh accepted (vertices).
 const MAX_VERTICES: usize = 3 * MAX_TRIANGLES;
 
+/// What the readers may take from one file. Every attribute pool is bounded by the vertex limit
+/// and the file's faces by the triangle limit, before anything is allocated for them.
+fn limits() -> Limits {
+    Limits { max_vertices: MAX_VERTICES, max_triangles: MAX_TRIANGLES, ..Limits::default() }
+}
+
 fn check_vertex_bound(current: usize, added: usize) -> Result<()> {
     if current.checked_add(added).is_none_or(|total| total > MAX_VERTICES) {
         return Err(bad("the mesh is too large"));
-    }
-    Ok(())
-}
-
-/// Reject an OBJ whose raw attribute or face definitions exceed the bounds
-/// before the parser allocates storage for them. Unreferenced definitions
-/// never reach the parsed mesh, so counting parsed vertices alone cannot
-/// bound this input. First tokens are matched with `split_whitespace`, the
-/// same Unicode whitespace rules the OBJ parser uses.
-fn check_obj_vertex_bound(bytes: &[u8]) -> Result<()> {
-    let mut vertices = 0usize;
-    let mut texcoords = 0usize;
-    let mut normals = 0usize;
-    let mut face_corners = 0usize;
-    for line in bytes.split(|b| *b == b'\n') {
-        let Ok(line) = std::str::from_utf8(line) else { continue };
-        let mut tokens = line.split_whitespace();
-        match tokens.next() {
-            Some("v") => {
-                vertices = vertices.saturating_add(1);
-                if vertices > MAX_VERTICES {
-                    return Err(bad("the mesh is too large"));
-                }
-            }
-            Some("vt") => {
-                texcoords = texcoords.saturating_add(1);
-                if texcoords > MAX_VERTICES {
-                    return Err(bad("the mesh is too large"));
-                }
-            }
-            Some("vn") => {
-                normals = normals.saturating_add(1);
-                if normals > MAX_VERTICES {
-                    return Err(bad("the mesh is too large"));
-                }
-            }
-            Some("f") | Some("l") => {
-                // A triangulated face with k corners yields k - 2 triangles, so
-                // a mesh within the triangle limit has at most 3 * MAX_TRIANGLES
-                // corners. Lines are expanded by the parser like faces, so
-                // bounding their corners too bounds the vertices the parser
-                // expands from distinct index combinations.
-                face_corners = face_corners.saturating_add(tokens.count());
-                if face_corners > 3 * MAX_TRIANGLES {
-                    return Err(bad("the mesh is too large"));
-                }
-            }
-            _ => {}
-        }
     }
     Ok(())
 }
@@ -76,25 +34,12 @@ fn bad(msg: impl Into<String>) -> FormatError {
     FormatError::BadPackage(msg.into())
 }
 
-/// Append the triangles of `ix` to `out`, offset by `base`. Whole triangles are dropped when any
-/// of their indices is `>= n` (or when a trailing partial triangle is left over), so the
-/// triangles that follow keep their vertices.
-fn push_triangles(out: &mut Vec<u32>, ix: impl IntoIterator<Item = u32>, n: usize, base: u32) -> Result<()> {
-    append_triangles(out, ix, n, base, MAX_TRIANGLES)
-}
-
-fn append_triangles(out: &mut Vec<u32>, ix: impl IntoIterator<Item = u32>, n: usize, base: u32, limit: usize) -> Result<()> {
-    let mut ix = ix.into_iter();
-    while let (Some(a), Some(b), Some(c)) = (ix.next(), ix.next(), ix.next()) {
-        let t = [a, b, c];
-        if t.iter().all(|i| (*i as usize) < n) {
-            if out.len() / 3 >= limit {
-                return Err(bad("the mesh is too large"));
-            }
-            out.extend(t.iter().map(|i| i.saturating_add(base)));
-        }
+/// A reader error as the message the 3D view shows; every exceeded limit reads the same.
+fn read_error(kind: &str, e: craft_mesh::Error) -> FormatError {
+    match e {
+        craft_mesh::Error::TooLarge(_) => bad("the mesh is too large"),
+        e => bad(format!("{kind}: {e}")),
     }
-    Ok(())
 }
 
 /// Build the mesh, rejecting non-finite positions, normals and UVs before anything computes
@@ -115,11 +60,15 @@ fn finish(positions: Vec<Vec3>, normals: Option<Vec<Vec3>>, uvs: Vec<Vec2>, indi
 /// Parse a mesh file by extension.
 pub fn load_mesh(name: &str, bytes: &[u8]) -> Result<Mesh> {
     let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default();
-    let mut mesh = match ext.as_str() {
-        "obj" => obj(bytes)?,
-        "glb" | "gltf" => gltf(bytes)?,
+    let limits = limits();
+    // Only self-contained files: a reference to another file (an MTL library, an external
+    // buffer) is declined, as the view has no folder to look in.
+    let scene = match ext.as_str() {
+        "obj" => craft_mesh::obj::read(bytes, &limits, &mut craft_mesh::no_external).map_err(|e| read_error("OBJ", e))?,
+        "glb" | "gltf" => craft_mesh::gltf::read(bytes, &limits, &mut craft_mesh::no_external).map_err(|e| read_error("glTF", e))?,
         other => return Err(bad(format!("unsupported mesh format `{other}` (OBJ, glTF or GLB)"))),
     };
+    let mut mesh = scene_mesh(&scene, &limits)?;
     if mesh.indices.is_empty() || mesh.positions.is_empty() {
         return Err(bad("the mesh has no triangles"));
     }
@@ -139,99 +88,100 @@ pub fn load_mesh(name: &str, bytes: &[u8]) -> Result<Mesh> {
     Ok(mesh)
 }
 
-fn obj(bytes: &[u8]) -> Result<Mesh> {
-    check_obj_vertex_bound(bytes)?;
-    let mut reader = std::io::BufReader::new(bytes);
-    let opts = tobj::LoadOptions { triangulate: true, single_index: true, ..Default::default() };
-    let (models, _) = crate::guard(
-        || tobj::load_obj_buf(&mut reader, &opts, |_| Ok((Vec::new(), Default::default()))).map_err(|e| bad(format!("OBJ: {e}"))),
-        || bad("the OBJ parser failed on this file"),
-    )?;
-    let mut positions = Vec::new();
-    let mut normals = Vec::new();
-    let mut uvs = Vec::new();
-    let mut indices = Vec::new();
-    for m in models {
-        let base = positions.len() as u32;
-        let mesh = &m.mesh;
-        let n = mesh.positions.len() / 3;
-        check_vertex_bound(positions.len(), n)?;
-        for i in 0..n {
-            positions.push(Vec3::new(mesh.positions[i * 3], mesh.positions[i * 3 + 1], mesh.positions[i * 3 + 2]));
-            if mesh.normals.len() == mesh.positions.len() {
-                normals.push(Vec3::new(mesh.normals[i * 3], mesh.normals[i * 3 + 1], mesh.normals[i * 3 + 2]));
-            }
-            // OBJ UVs have their origin at the bottom left.
-            uvs.push(mesh.texcoords.get(i * 2..i * 2 + 2).map_or(Vec2::ZERO, |t| Vec2::new(t[0], 1.0 - t[1])));
-        }
-        push_triangles(&mut indices, mesh.indices.iter().copied(), n, base)?;
-        if indices.len() / 3 > MAX_TRIANGLES {
-            return Err(bad("the mesh is too large"));
-        }
+/// Whether any value the file stored for a vertex is NaN or infinite. The reader drops the
+/// triangles that reach a non-finite position; the view rejects the whole file instead, so a
+/// damaged mesh is reported rather than shown with holes.
+fn non_finite(scene: &Scene) -> Option<&'static str> {
+    let f64s = |v: &[[f64; 3]]| v.iter().flatten().any(|x| !x.is_finite());
+    if scene.meshes.iter().any(|m| f64s(&m.positions)) {
+        return Some("positions");
     }
-    let normals = (normals.len() == positions.len()).then_some(normals);
-    finish(positions, normals, uvs, indices)
+    if scene.meshes.iter().any(|m| f64s(&m.normals)) {
+        return Some("normals");
+    }
+    if scene.meshes.iter().flat_map(|m| m.uv_sets.first()).any(|s| s.iter().flatten().any(|x| !x.is_finite())) {
+        return Some("UVs");
+    }
+    None
 }
 
-fn gltf(bytes: &[u8]) -> Result<Mesh> {
-    let (doc, buffers, _) = crate::guard(|| gltf::import_slice(bytes).map_err(|e| bad(format!("glTF: {e}"))), || bad("the glTF parser failed on this file"))?;
-    let mut positions = Vec::new();
+/// One triangle mesh of every placed mesh in the scene. Positions are transformed into world
+/// space in `f64`, then centered and scaled to a unit-size box before conversion to `f32`, so a
+/// placement far from the origin keeps its shape; [`load_mesh`] then normalizes to a unit sphere.
+/// Normals and UVs are kept only when every placed mesh has them (otherwise [`load_mesh`]
+/// computes normals and projects UVs for the whole mesh); the first UV set is used. Normals go
+/// through the inverse transpose, and a mirrored placement has its winding reversed so its
+/// triangles keep facing out.
+fn scene_mesh(scene: &Scene, limits: &Limits) -> Result<Mesh> {
+    if let Some(what) = non_finite(scene) {
+        return Err(bad(format!("the mesh has non-finite (NaN or infinite) {what}")));
+    }
+    let instances = scene.instances(limits).map_err(|e| read_error("mesh", e))?;
+    let mut world_positions = Vec::new();
     let mut normals = Vec::new();
     let mut uvs = Vec::new();
     let mut indices = Vec::new();
     let mut all_normals = true;
-    for node in doc.nodes() {
-        let Some(mesh) = node.mesh() else { continue };
-        let m = materialcraft_geom::glam::Mat4::from_cols_array_2d(&node.transform().matrix());
-        for prim in mesh.primitives() {
-            if prim.mode() != gltf::mesh::Mode::Triangles {
-                continue;
-            }
-            let reader = prim.reader(|b| buffers.get(b.index()).map(|d| d.0.as_slice()));
-            let Some(pos) = reader.read_positions() else { continue };
-            let base = positions.len() as u32;
-            let pos_it = pos.map(|p| m.transform_point3(Vec3::from(p)));
-            let n = pos_it.len();
-            check_vertex_bound(positions.len(), n)?;
-            let pos: Vec<Vec3> = pos_it.collect();
-            match reader.read_normals() {
-                Some(ns) => {
-                    for q in ns {
-                        if normals.len() >= MAX_VERTICES {
-                            return Err(bad("the mesh is too large"));
-                        }
-                        let v = m.transform_vector3(Vec3::from(q));
-                        if !v.is_finite() {
-                            return Err(bad("the mesh has non-finite (NaN or infinite) normals"));
-                        }
-                        normals.push(v.normalize_or_zero());
-                    }
-                }
-                None => all_normals = false,
-            }
-            match reader.read_tex_coords(0) {
-                Some(t) => {
-                    for uv in t.into_f32() {
-                        if uvs.len() >= MAX_VERTICES {
-                            return Err(bad("the mesh is too large"));
-                        }
-                        uvs.push(Vec2::from(uv));
-                    }
-                }
-                None => uvs.extend(std::iter::repeat_n(Vec2::ZERO, n)),
-            }
-            match reader.read_indices() {
-                Some(ix) => push_triangles(&mut indices, ix.into_u32(), n, base)?,
-                None => push_triangles(&mut indices, 0..n as u32, n, base)?,
-            }
-            positions.extend(pos);
-            if indices.len() / 3 > MAX_TRIANGLES {
+    let mut all_uvs = true;
+    for (index, world) in instances {
+        let Some(mesh) = scene.meshes.get(index) else { continue };
+        let unified = mesh.unified();
+        let n = unified.positions.len();
+        check_vertex_bound(world_positions.len(), n)?;
+        let Ok(base) = u32::try_from(world_positions.len()) else { return Err(bad("the mesh is too large")) };
+        world_positions.extend(unified.positions.iter().map(|p| craft_mesh::transform_point(&world, *p)));
+        if unified.normals.len() == n {
+            normals.extend(unified.normals.iter().map(|q| to_vec3(craft_mesh::transform_normal(&world, *q))));
+        } else {
+            all_normals = false;
+        }
+        if unified.uvs.len() == n {
+            uvs.extend(unified.uvs.iter().map(|t| Vec2::from(*t)));
+        } else {
+            all_uvs = false;
+        }
+        let mirror = craft_mesh::is_mirror(&world);
+        for tri in unified.parts.iter().flatten() {
+            if indices.len() / 3 >= MAX_TRIANGLES {
                 return Err(bad("the mesh is too large"));
             }
+            let [a, b, c] = tri.map(|i| i.saturating_add(base));
+            indices.extend(if mirror { [a, c, b] } else { [a, b, c] });
         }
     }
+    let positions = to_f32_positions(&world_positions);
     let normals = (all_normals && normals.len() == positions.len()).then_some(normals);
+    // Partial UVs would hide the gap from the projection fallback: drop them all instead.
+    if !all_uvs || uvs.len() != positions.len() {
+        uvs.clear();
+    }
     finish(positions, normals, uvs, indices)
+}
+
+/// Center and scale world-space positions in `f64`, then convert to `f32`. A unit quad whose
+/// node sits at a large translation would otherwise collapse: at magnitude `2^25` the `f32`
+/// spacing is 4, so the four corners round to one point and [`Mesh::normalize_to`] cannot
+/// recover the shape.
+fn to_f32_positions(world: &[[f64; 3]]) -> Vec<Vec3> {
+    if world.is_empty() {
+        return Vec::new();
+    }
+    let mut lo = [f64::INFINITY; 3];
+    let mut hi = [f64::NEG_INFINITY; 3];
+    for p in world {
+        for (i, &x) in p.iter().enumerate() {
+            lo[i] = lo[i].min(x);
+            hi[i] = hi[i].max(x);
+        }
+    }
+    let center = [0, 1, 2].map(|i| (lo[i] + hi[i]) * 0.5);
+    let extent = hi.iter().zip(&lo).map(|(h, l)| h - l).fold(0.0, f64::max);
+    let scale = if extent.is_finite() && extent > 0.0 { 1.0 / extent } else { 1.0 };
+    world.iter().map(|p| to_vec3([(p[0] - center[0]) * scale, (p[1] - center[1]) * scale, (p[2] - center[2]) * scale])).collect()
+}
+
+fn to_vec3(p: [f64; 3]) -> Vec3 {
+    Vec3::new(p[0] as f32, p[1] as f32, p[2] as f32)
 }
 
 /// Box-projected UVs: each vertex takes the plane of its normal's largest axis.
@@ -304,20 +254,6 @@ mod tests {
     const QUAD: [[f32; 3]; 4] = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]];
 
     #[test]
-    fn triangle_limit_stops_a_stream_before_collecting_the_rest() {
-        let mut out = Vec::new();
-        let mut read = 0;
-        let indices = std::iter::from_fn(|| {
-            read += 1;
-            assert!(read <= 6, "read beyond the first triangle over the limit");
-            Some(0)
-        });
-        assert!(append_triangles(&mut out, indices, 1, 0, 1).is_err());
-        assert_eq!(out, [0, 0, 0]);
-        assert_eq!(read, 6);
-    }
-
-    #[test]
     fn obj_with_excess_vertices_is_rejected() {
         let mut obj = String::from("v 0 0 0\nv 1 0 0\nv 0 1 0\n");
         for _ in 0..3 * MAX_TRIANGLES {
@@ -330,12 +266,11 @@ mod tests {
     }
 
     #[test]
-    fn gltf_with_excess_vertices_is_rejected() {
+    fn gltf_primitives_sharing_a_large_accessor_stay_bounded() {
         use base64::Engine as _;
         // One position accessor of 100_000 vertices, referenced by 121
-        // primitives: the cumulative count exceeds MAX_VERTICES on the
-        // last primitive, while the single indexed triangle per primitive
-        // stays far below the triangle limit.
+        // primitives: copied once per primitive it would exceed MAX_VERTICES.
+        // Only the vertices the triangles use are kept, so the view gets 3.
         const COUNT: usize = 100_000;
         let mut buf = vec![0u8; COUNT * 12];
         // Give the referenced triangle non-degenerate positions.
@@ -356,40 +291,113 @@ mod tests {
             COUNT * 12,
             buf.len()
         );
-        let e = load_mesh("excess.gltf", gltf.as_bytes()).unwrap_err();
-        assert!(matches!(&e, FormatError::BadPackage(msg) if msg == "the mesh is too large"), "{e:?}");
+        let m = load_mesh("shared.gltf", gltf.as_bytes()).unwrap();
+        assert_eq!(m.positions.len(), 3);
+        assert_eq!(m.triangle_count(), 121);
     }
 
     #[test]
-    fn obj_non_finite_normals_are_rejected() {
-        assert!(load_mesh("x.obj", b"v 0 0 0\nv 1 0 0\nv 0 1 0\nvn nan 0 1\nf 1//1 2//1 3//1\n").is_err());
+    fn obj_non_finite_normals_and_uvs_never_reach_the_mesh() {
+        // The shared OBJ reader drops a corner's NaN normal or UV; the view then computes normals
+        // and projects UVs, so nothing non-finite is drawn.
+        for obj in
+            [&b"v 0 0 0\nv 1 0 0\nv 0 1 0\nvn nan 0 1\nf 1//1 2//1 3//1\n"[..], &b"v 0 0 0\nv 1 0 0\nv 0 1 0\nvt nan 0\nvt 1 0\nvt 0 1\nf 1/1 2/2 3/3\n"[..]]
+        {
+            let m = load_mesh("x.obj", obj).unwrap();
+            assert!(m.normals.iter().all(|n| n.is_finite()) && m.uvs.iter().all(|u| u.is_finite()), "{m:?}");
+        }
+        // A triangle on a NaN position is dropped; with nothing left the file is refused.
+        assert!(load_mesh("x.obj", b"v 0 0 0\nv 1 0 0\nv nan 1 0\nf 1 2 3\n").is_err());
     }
 
-    #[test]
-    fn gltf_non_finite_normals_are_rejected() {
+    /// [`QUAD`] with the given vertex normals, placed by one node.
+    fn gltf_with_normals(normals: [[f32; 3]; 4]) -> Vec<u8> {
         use base64::Engine as _;
-        let gltf_with_normals = |normals: [[f32; 3]; 4]| {
-            let idx: [u16; 6] = [0, 1, 2, 0, 2, 3];
-            let mut buf: Vec<u8> = QUAD.iter().flatten().flat_map(|f| f.to_le_bytes()).collect();
-            buf.extend(normals.iter().flatten().flat_map(|f| f.to_le_bytes()));
-            buf.extend(idx.iter().flat_map(|i| i.to_le_bytes()));
-            let b64 = base64::engine::general_purpose::STANDARD.encode(&buf);
-            format!(
-                r#"{{"asset":{{"version":"2.0"}},"scene":0,"scenes":[{{"nodes":[0]}}],"nodes":[{{"mesh":0}}],
+        let idx: [u16; 6] = [0, 1, 2, 0, 2, 3];
+        let mut buf: Vec<u8> = QUAD.iter().flatten().flat_map(|f| f.to_le_bytes()).collect();
+        buf.extend(normals.iter().flatten().flat_map(|f| f.to_le_bytes()));
+        buf.extend(idx.iter().flat_map(|i| i.to_le_bytes()));
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&buf);
+        format!(
+            r#"{{"asset":{{"version":"2.0"}},"scene":0,"scenes":[{{"nodes":[0]}}],"nodes":[{{"mesh":0}}],
 "meshes":[{{"primitives":[{{"attributes":{{"POSITION":0,"NORMAL":1}},"indices":2}}]}}],
 "accessors":[{{"bufferView":0,"componentType":5126,"count":4,"type":"VEC3","min":[-1e9,-1e9,-1e9],"max":[1e9,1e9,1e9]}},{{"bufferView":1,"componentType":5126,"count":4,"type":"VEC3"}},{{"bufferView":2,"componentType":5123,"count":6,"type":"SCALAR"}}],
 "bufferViews":[{{"buffer":0,"byteOffset":0,"byteLength":48}},{{"buffer":0,"byteOffset":48,"byteLength":48}},{{"buffer":0,"byteOffset":96,"byteLength":12}}],
 "buffers":[{{"byteLength":{},"uri":"data:application/octet-stream;base64,{b64}"}}]}}"#,
-                buf.len()
-            )
-            .into_bytes()
-        };
+            buf.len()
+        )
+        .into_bytes()
+    }
+
+    /// `gltf` with its one placing node replaced by `node`.
+    fn placed(gltf: Vec<u8>, node: &str) -> Vec<u8> {
+        let base = String::from_utf8(gltf).unwrap();
+        let out = base.replace(r#""nodes":[{"mesh":0}]"#, &format!(r#""nodes":[{node}]"#));
+        assert_ne!(base, out, "the node was not replaced");
+        out.into_bytes()
+    }
+
+    #[test]
+    fn gltf_non_finite_normals_are_rejected() {
         let mut nan_normals = [[0.0f32, 0.0, 1.0]; 4];
         nan_normals[2][0] = f32::NAN;
         assert!(load_mesh("x.gltf", &gltf_with_normals(nan_normals)).is_err());
         let mut inf_normals = [[0.0f32, 0.0, 1.0]; 4];
         inf_normals[1][2] = f32::INFINITY;
         assert!(load_mesh("x.gltf", &gltf_with_normals(inf_normals)).is_err());
+    }
+
+    #[test]
+    fn a_far_translation_keeps_the_quads_shape() {
+        // 2^25: an f32 ULP at this magnitude is 4, so a unit quad converted in world space
+        // would collapse to a point before normalize_to runs.
+        let local = load_mesh("quad.gltf", &gltf_json(QUAD, None, &[0, 1, 2, 0, 2, 3])).unwrap();
+        let far = 33_554_432.0;
+        let placed = placed(gltf_json(QUAD, None, &[0, 1, 2, 0, 2, 3]), &format!(r#"{{"mesh":0,"translation":[{far},{far},0]}}"#));
+        let distant = load_mesh("far.gltf", &placed).unwrap();
+        assert_eq!(distant.triangle_count(), local.triangle_count());
+        let local_ext = extent(&local);
+        let distant_ext = extent(&distant);
+        assert!((distant_ext - local_ext).length() < 1e-4, "local={local_ext} far={distant_ext}");
+        for (a, b) in local.positions.iter().zip(&distant.positions) {
+            assert!(a.distance(*b) < 1e-4, "local={a} far={b}");
+        }
+    }
+
+    #[test]
+    fn normals_follow_a_non_uniform_scale_by_the_inverse_transpose() {
+        // Stretched twice along x, a (1,1,0) normal leans towards y: (0.5,1,0), normalised.
+        let gltf = placed(gltf_with_normals([[1.0, 1.0, 0.0]; 4]), r#"{"mesh":0,"scale":[2,1,1]}"#);
+        let m = load_mesh("x.gltf", &gltf).unwrap();
+        let want = Vec3::new(0.5, 1.0, 0.0).normalize();
+        assert!(m.normals.iter().all(|n| n.distance(want) < 1e-5), "{:?}", m.normals);
+    }
+
+    #[test]
+    fn a_mirrored_placement_keeps_its_triangles_facing_out() {
+        let gltf = placed(gltf_with_normals([[0.0, 0.0, 1.0]; 4]), r#"{"mesh":0,"scale":[-1,1,1]}"#);
+        let m = load_mesh("x.gltf", &gltf).unwrap();
+        for tri in m.indices.chunks(3) {
+            let [a, b, c] = [0, 1, 2].map(|k| m.positions[tri[k] as usize]);
+            let face = (b - a).cross(c - a);
+            assert!(face.dot(m.normals[tri[0] as usize]) > 0.0, "triangle {tri:?} faces in");
+        }
+    }
+
+    #[test]
+    fn a_placed_mesh_without_uvs_still_gets_projected_ones() {
+        // Two meshes: one with varied UVs, one with none, side by side.
+        let uvs = [[0.0f32, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
+        let base = String::from_utf8(gltf_json(QUAD, Some(uvs), &[0, 1, 2, 0, 2, 3])).unwrap();
+        let with = r#""meshes":[{"primitives":[{"attributes":{"POSITION":0,"TEXCOORD_0":1},"indices":2}]}]"#;
+        assert!(base.contains(with));
+        let two = base
+            .replace(with, r#""meshes":[{"primitives":[{"attributes":{"POSITION":0,"TEXCOORD_0":1},"indices":2}]},{"primitives":[{"attributes":{"POSITION":0},"indices":2}]}]"#)
+            .replace(r#""scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}]"#, r#""scenes":[{"nodes":[0,1]}],"nodes":[{"mesh":0},{"mesh":1,"translation":[2,0,0]}]"#);
+        let m = load_mesh("two.gltf", two.as_bytes()).unwrap();
+        assert_eq!(m.positions.len(), 8);
+        let second = &m.uvs[4..];
+        assert!(second.iter().any(|u| *u != second[0]), "the mesh without UVs got one constant UV: {second:?}");
     }
 
     #[test]
@@ -412,7 +420,6 @@ mod tests {
         nan_uv[1][1] = f32::NAN;
         let e = load_mesh("x.gltf", &gltf_json(QUAD, Some(nan_uv), &[0, 1, 2, 0, 2, 3])).unwrap_err();
         assert!(e.to_string().contains("non-finite"), "{e}");
-        assert!(load_mesh("x.obj", b"v 0 0 0\nv 1 0 0\nv 0 1 0\nvt nan 0\nvt 1 0\nvt 0 1\nf 1/1 2/2 3/3\n").is_err());
     }
 
     #[test]
@@ -421,6 +428,61 @@ mod tests {
         assert!(load_mesh("x.glb", b"glTF garbage").is_err());
         assert!(load_mesh("x.fbx", b"").is_err());
         assert!(load_mesh("x.obj", b"v 0 0 0\nf 1 2 3\n").is_err());
+    }
+
+    /// [`gltf_json`]'s quad with its scene's root nodes and node list replaced.
+    fn gltf_with_nodes(roots: &str, nodes: &str) -> Vec<u8> {
+        let base = String::from_utf8(gltf_json(QUAD, None, &[0, 1, 2, 0, 2, 3])).unwrap();
+        let placed = base.replace(r#""scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}]"#, &format!(r#""scenes":[{{"nodes":{roots}}}],"nodes":{nodes}"#));
+        assert_ne!(base, placed, "the node list was not replaced");
+        placed.into_bytes()
+    }
+
+    fn extent(m: &Mesh) -> Vec3 {
+        let (lo, hi) = m.bounds();
+        hi - lo
+    }
+
+    #[test]
+    fn gltf_meshes_take_their_parent_nodes_transforms() {
+        // The quad sits under a parent that stretches it three times taller.
+        let nested = gltf_with_nodes("[0]", r#"[{"scale":[1,3,1],"children":[1]},{"mesh":0}]"#);
+        let m = load_mesh("nested.gltf", &nested).unwrap();
+        let size = extent(&m);
+        assert!((size.y / size.x - 3.0).abs() < 1e-4, "{size}");
+        // A mesh placed twice is drawn twice.
+        let twice = gltf_with_nodes("[0,1]", r#"[{"mesh":0},{"mesh":0,"translation":[5,0,0]}]"#);
+        assert_eq!(load_mesh("twice.gltf", &twice).unwrap().triangle_count(), 4);
+        // Nodes outside the scene are not drawn.
+        let unplaced = gltf_with_nodes("[0]", r#"[{"mesh":0},{"mesh":0,"translation":[5,0,0]}]"#);
+        assert_eq!(load_mesh("one.gltf", &unplaced).unwrap().triangle_count(), 2);
+    }
+
+    #[test]
+    fn glb_container_loads() {
+        let json = String::from_utf8(gltf_json(QUAD, None, &[0, 1, 2, 0, 2, 3])).unwrap();
+        let glb = craft_mesh::gltf::glb_container(json.as_bytes(), &[]).unwrap();
+        assert_eq!(load_mesh("quad.GLB", &glb).unwrap().triangle_count(), 2);
+    }
+
+    #[test]
+    fn obj_polygons_split_corners_and_material_libraries() {
+        // A pentagon whose corners share positions but not UVs, naming a material library the
+        // view cannot open: it still loads, triangulated, with the file's UVs.
+        let obj = b"mtllib missing.mtl\nv 0 0 0\nv 1 0 0\nv 1.5 1 0\nv 0.5 2 0\nv -0.5 1 0\nvt 0 0\nvt 1 0\nvt 1 1\nvt 0.5 1\nvt 0 1\nusemtl paint\nf 1/1 2/2 3/3 4/4 5/5\n";
+        let m = load_mesh("penta.obj", obj).unwrap();
+        assert_eq!(m.triangle_count(), 3);
+        // OBJ stores v up; the view uses v down.
+        assert!(m.uvs.iter().any(|u| (u.y - 1.0).abs() < 1e-6));
+        assert!(m.uvs.iter().any(|u| u.y.abs() < 1e-6));
+    }
+
+    #[test]
+    fn reader_errors_read_as_the_views_messages() {
+        let e = read_error("OBJ", craft_mesh::Error::TooLarge("vertices".into()));
+        assert!(matches!(&e, FormatError::BadPackage(msg) if msg == "the mesh is too large"), "{e:?}");
+        let e = read_error("OBJ", craft_mesh::Error::Malformed("bad face".into()));
+        assert!(e.to_string().contains("OBJ: bad face"), "{e}");
     }
 
     #[test]

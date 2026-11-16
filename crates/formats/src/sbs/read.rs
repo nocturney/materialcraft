@@ -1,25 +1,23 @@
 use super::{
-    constant::{MAX_GRAPHS, MAX_XML_NODES, SNIFF_BYTES},
+    constant::{MAX_GRAPHS, SNIFF_BYTES},
     placeholder::report_placeholders,
     sbs_read::SbsRead,
     sbs_reader::SbsReader,
     warnings::Warnings,
     xml::{child_element, child_value, children_named},
 };
-use crate::{FormatError, Result};
+use crate::Result;
 use materialcraft_core::Package;
 use roxmltree::Node as XmlNode;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 pub fn read_sbs(bytes: &[u8], name: &str, linked: &dyn Fn(&str) -> Option<Vec<u8>>) -> Result<SbsRead> {
-    let text = std::str::from_utf8(bytes).map_err(|e| FormatError::BadPackage(format!("the SBS file is not UTF-8 text: {e}")))?;
-    let text = text.trim_start_matches('\u{feff}');
-    let options = roxmltree::ParsingOptions { allow_dtd: false, nodes_limit: MAX_XML_NODES };
-    let doc = roxmltree::Document::parse_with_options(text, options).map_err(|e| FormatError::BadPackage(format!("the SBS file is not valid XML: {e}")))?;
+    super::SbsDocument::parse(bytes)?.read(name, linked)
+}
+
+pub(super) fn read_document(doc: &roxmltree::Document<'_>, name: &str, linked: &dyn Fn(&str) -> Option<Vec<u8>>) -> Result<SbsRead> {
+    let text = doc.input_text();
     let root = doc.root_element();
-    if root.tag_name().name() != "package" {
-        return Err(FormatError::BadPackage("not an SBS package (the root element is not <package>)".into()));
-    }
 
     let mut warnings = Warnings::default();
     let file_stem = name.rsplit(['/', '\\']).next().unwrap_or(name);
@@ -30,8 +28,19 @@ pub fn read_sbs(bytes: &[u8], name: &str, linked: &dyn Fn(&str) -> Option<Vec<u8
         _ => "Untitled package".to_string(),
     };
 
-    let mut reader =
-        SbsReader { text, warnings: &mut warnings, dependencies: HashMap::new(), graph_names: HashMap::new(), resource_names: HashMap::new(), node_count: 0 };
+    let mut reader = SbsReader {
+        text,
+        warnings: &mut warnings,
+        dependencies: HashMap::new(),
+        graph_names: HashMap::new(),
+        resource_names: HashMap::new(),
+        external_resource_names: HashMap::new(),
+        direct_resource_names: HashMap::new(),
+        used_resource_names: HashSet::new(),
+        node_count: 0,
+        wire_count: 0,
+    };
+
     for dependency in child_element(root, "dependencies").into_iter().flat_map(|d| children_named(d, "dependency")) {
         if let (Some(uid), Some(file)) = (child_value(dependency, "uid"), child_value(dependency, "filename")) {
             reader.dependencies.insert(uid.to_string(), file.to_string());
@@ -41,9 +50,12 @@ pub fn read_sbs(bytes: &[u8], name: &str, linked: &dyn Fn(&str) -> Option<Vec<u8
     // Load resources before resolving graph references
     let content = child_element(root, "content");
     let mut pkg = Package::new(&package_name);
+    pkg.format_version = child_value(root, "formatVersion").filter(|version| !version.trim().is_empty()).map(str::to_string);
     let mut graph_elements: Vec<(String, XmlNode)> = Vec::new();
     if let Some(content) = content {
         reader.collect_items(content, "", &mut pkg, &mut graph_elements, linked);
+        super::linked_resources::read(&mut reader, content, &mut pkg, linked);
+        super::resource_replacement::read_direct(&mut reader, content, &mut pkg, linked);
     }
 
     // Name every graph first so instances can refer to graphs defined later in the file
@@ -54,6 +66,7 @@ pub fn read_sbs(bytes: &[u8], name: &str, linked: &dyn Fn(&str) -> Option<Vec<u8
         reader.graph_names.insert(path.clone(), path.clone());
         names.push(name);
     }
+
     if graph_elements.len() > MAX_GRAPHS {
         reader.warnings.add(format!("only the first {MAX_GRAPHS} graphs were read"));
     }
@@ -67,6 +80,7 @@ pub fn read_sbs(bytes: &[u8], name: &str, linked: &dyn Fn(&str) -> Option<Vec<u8
     report_placeholders(&pkg, reader.warnings);
     Ok(SbsRead { pkg, warnings: warnings.finish() })
 }
+
 pub fn is_sbs(bytes: &[u8]) -> bool {
     let head = String::from_utf8_lossy(&bytes[..bytes.len().min(SNIFF_BYTES)]);
     let mut rest = head.trim_start_matches('\u{feff}');

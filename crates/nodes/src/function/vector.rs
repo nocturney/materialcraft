@@ -1,4 +1,4 @@
-use super::value_type::{dimensions, float_value, floats, integer_value, integers};
+use super::value_type::{dimensions, floats, integer_value, integers, intermediate_float_value as float_value};
 use materialcraft_core::Value;
 
 pub(crate) fn evaluate(op: &str, args: &[Value], setting: Option<&Value>) -> Result<Value, String> {
@@ -7,6 +7,7 @@ pub(crate) fn evaluate(op: &str, args: &[Value], setting: Option<&Value>) -> Res
     if !(1..=4).contains(&count) {
         return Err("invalid vector size".into());
     }
+
     let integer = op.starts_with('i') || op.starts_with("toint");
     let mut result_float = [0.0; 4];
     let mut result_int = [0; 4];
@@ -15,13 +16,14 @@ pub(crate) fn evaluate(op: &str, args: &[Value], setting: Option<&Value>) -> Res
         let floats = if integer { [0.0; 4] } else { floats(first)? };
         let integers = if integer { integers(first)? } else { [0; 4] };
         for (lane, index) in indices.iter().take(count).enumerate() {
-            let index = usize::try_from(*index).ok().filter(|index| *index < dimensions(first)).ok_or("swizzle component is outside its input")?;
+            let index = usize::try_from(*index).ok().filter(|index| *index < 4).ok_or("swizzle component is outside its input")?;
             if integer {
                 if let Some(result) = result_int.get_mut(lane) {
-                    *result = *integers.get(index).ok_or("invalid swizzle")?;
+                    // Swizzles read zero in undeclared lanes without scalar broadcast
+                    *result = if index < dimensions(first) { *integers.get(index).ok_or("invalid swizzle")? } else { 0 };
                 }
             } else if let Some(result) = result_float.get_mut(lane) {
-                *result = *floats.get(index).ok_or("invalid swizzle")?;
+                *result = if index < dimensions(first) { *floats.get(index).ok_or("invalid swizzle")? } else { 0.0 };
             }
         }
     } else if op.contains("vector") {
@@ -47,13 +49,16 @@ pub(crate) fn evaluate(op: &str, args: &[Value], setting: Option<&Value>) -> Res
         if dimensions(first) != count {
             return Err("casts preserve the number of components".into());
         }
+
         if integer {
             let values = floats(first)?;
             for (result, value) in result_int.iter_mut().zip(values).take(count) {
                 if !value.is_finite() || !(-2147483648.0..2147483648.0).contains(&value) {
                     return Err("float is outside the integer range".into());
                 }
-                *result = value.trunc() as i32;
+
+                // Round down because truncation shifts negative texture and lattice indices
+                *result = value.floor() as i32;
             }
         } else {
             for (result, value) in result_float.iter_mut().zip(integers(first)?).take(count) {

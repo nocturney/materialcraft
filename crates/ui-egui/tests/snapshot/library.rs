@@ -40,6 +40,7 @@ fn library_tree_shows_every_category_and_adds_what_the_graph_takes() {
     ] {
         assert!(harness.query(tree(label)).is_some(), "{label}");
     }
+
     assert!(harness.query(tree("SDF functions")).is_none(), "the category is MCF functions now");
 
     // Graph items, then the atomic nodes with their previews
@@ -48,11 +49,13 @@ fn library_tree_shows_every_category_and_adds_what_the_graph_takes() {
     for label in ["Comment", "Frame", "Pin", "Dot node"] {
         assert!(harness.query(tile(label)).is_some(), "{label}");
     }
+
     harness.get(tree("Atomic nodes")).click();
     settle(&mut harness, 12);
     for label in ["Blend", "Blur", "Levels", "Output", "Input color"] {
         assert!(harness.query(tile(label)).is_some(), "{label}");
     }
+
     save(&mut harness, &directory, "library-atomic-nodes");
 
     // Dragging a tile adds it where it drops
@@ -70,15 +73,18 @@ fn library_tree_shows_every_category_and_adds_what_the_graph_takes() {
     harness.event(egui::Event::PointerButton { pos: end, button: egui::PointerButton::Primary, pressed: false, modifiers: egui::Modifiers::NONE });
     settle(&mut harness, 5);
     let graph = harness.state().session.graph().unwrap();
+
     assert_eq!(graph.nodes.len(), before + 1);
     assert_eq!(graph.nodes.last().unwrap().def, "blur");
 
-    // Categories MaterialCraft has no nodes for yet say so
+    // The bundled library fills the noise category
     harness.get(tree("Texture generators")).click();
     settle(&mut harness, 3);
     harness.get(tree("Noises")).click();
     settle(&mut harness, 4);
-    assert!(harness.query(By::new().label("Nothing in this category yet")).is_some());
+
+    assert!(harness.query(tile("Perlin noise")).is_some());
+
     harness.get(tree("Texture generators")).click();
     settle(&mut harness, 2);
     harness.get(tree("Texture generators")).click();
@@ -92,11 +98,13 @@ fn library_tree_shows_every_category_and_adds_what_the_graph_takes() {
     for label in ["Pi", "2 Pi"] {
         assert!(harness.query(tile(label)).is_some(), "{label}");
     }
+
     save(&mut harness, &directory, "library-functions-constant");
     harness.get(tree("Functions")).click();
     settle(&mut harness, 2);
     harness.get(tree("Functions")).click();
     settle(&mut harness, 2);
+
     assert!(!harness.state().ui.library_expanded.contains("Functions"));
 
     for (top, subs) in [
@@ -117,6 +125,7 @@ fn library_tree_shows_every_category_and_adds_what_the_graph_takes() {
         // Clicking the selected, open category closes it again
         harness.get(tree(top)).click();
         settle(&mut harness, 2);
+
         assert!(!harness.state().ui.library_expanded.contains(top), "{top}");
     }
 
@@ -129,13 +138,17 @@ fn library_tree_shows_every_category_and_adds_what_the_graph_takes() {
     settle(&mut harness, 2);
     harness.get(tree("Favorites")).click();
     settle(&mut harness, 3);
+
     assert!(harness.query(tile("Blend")).is_some());
     assert_eq!(harness.state().ui.library_favorites, ["node:blend"]);
+
     save(&mut harness, &directory, "library-favorites");
 
     // Search finds entries across the whole library, what the graph takes first
     harness.state_mut().ui.library_search = "blur".into();
     settle(&mut harness, 4);
+
     assert!(harness.query(tile("Blur")).is_some());
+
     save(&mut harness, &directory, "library-search");
 }

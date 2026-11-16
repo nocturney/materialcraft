@@ -5,7 +5,6 @@
 
 use super::{
     LayoutFrame, LayoutItem,
-    constant::MAX_XML_NODES,
     filter_map::FILTERS,
     xml::{child_element, child_value, children_named, parse_floats},
 };
@@ -19,14 +18,11 @@ const MAX_ITEMS: usize = 65_536;
 
 /// The frames of every graph and parameter function in `bytes`, in document order
 pub fn read_layout(bytes: &[u8], uri: &str) -> Result<Vec<LayoutFrame>> {
-    let text = std::str::from_utf8(bytes).map_err(|e| FormatError::BadPackage(format!("the SBS file is not UTF-8 text: {e}")))?;
-    let text = text.trim_start_matches('\u{feff}');
-    let options = roxmltree::ParsingOptions { allow_dtd: false, nodes_limit: MAX_XML_NODES };
-    let doc = roxmltree::Document::parse_with_options(text, options).map_err(|e| FormatError::BadPackage(format!("the SBS file is not valid XML: {e}")))?;
+    super::SbsDocument::parse(bytes)?.layout(uri)
+}
+
+pub(super) fn read_document(doc: &roxmltree::Document<'_>, uri: &str) -> Result<Vec<LayoutFrame>> {
     let root = doc.root_element();
-    if root.tag_name().name() != "package" {
-        return Err(FormatError::BadPackage("not an SBS package (the root element is not <package>)".into()));
-    }
 
     let mut dependencies = HashMap::new();
     for dependency in child_element(root, "dependencies").into_iter().flat_map(|d| children_named(d, "dependency")) {
@@ -77,6 +73,7 @@ pub fn read_layout(bytes: &[u8], uri: &str) -> Result<Vec<LayoutFrame>> {
                 items += 1;
             }
         }
+
         placed.sort_by(|a, b| a.0.cmp(&b.0).then(a.1[1].total_cmp(&b.1[1])).then(a.1[0].total_cmp(&b.1[0])));
         let mut grouped: Vec<Vec<LayoutItem>> = vec![Vec::new(); scope_frames.len()];
         for (frame, _, item) in placed {
@@ -84,6 +81,7 @@ pub fn read_layout(bytes: &[u8], uri: &str) -> Result<Vec<LayoutFrame>> {
                 list.push(item);
             }
         }
+
         for ((title, _), items) in scope_frames.drain(..).zip(grouped) {
             if frames.len() >= MAX_FRAMES {
                 break;
@@ -92,6 +90,7 @@ pub fn read_layout(bytes: &[u8], uri: &str) -> Result<Vec<LayoutFrame>> {
             frames.push(LayoutFrame { title, function, items });
         }
     }
+
     Ok(frames)
 }
 

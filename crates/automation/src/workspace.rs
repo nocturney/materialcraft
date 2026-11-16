@@ -10,6 +10,9 @@ use serde_json::Value;
 
 use crate::{AutomationError, bad};
 
+/// Upper bound for one automation read, so a hostile path cannot force a multi-gigabyte allocation.
+pub const MAX_READ_BYTES: u64 = 2 << 30;
+
 /// Separate read and write directory capabilities. A missing authority fails closed
 #[derive(Clone, Default)]
 pub struct AuthorizedWorkspace {
@@ -26,14 +29,20 @@ impl AuthorizedWorkspace {
     pub fn read(&self, path: &str) -> Result<Vec<u8>, AutomationError> {
         let rel = relative_path(path)?;
         let root = self.read.as_ref().ok_or_else(|| denied("read"))?;
-        let mut file = root.open(&rel).map_err(|e| file_error("read", path, e))?;
+        let file = root.open(&rel).map_err(|e| file_error("read", path, e))?;
         let metadata = file.metadata().map_err(|e| file_error("read", path, e))?;
         if !metadata.is_file() {
             return Err(bad(format!("not a regular file: `{path}`")));
         }
 
+        if metadata.len() > MAX_READ_BYTES {
+            return Err(bad(format!("file too large: `{path}` is {} bytes (limit {MAX_READ_BYTES})", metadata.len())));
+        }
         let mut bytes = Vec::new();
-        file.read_to_end(&mut bytes).map_err(|e| file_error("read", path, e))?;
+        file.take(MAX_READ_BYTES + 1).read_to_end(&mut bytes).map_err(|e| file_error("read", path, e))?;
+        if bytes.len() as u64 > MAX_READ_BYTES {
+            return Err(bad(format!("file too large: `{path}` exceeds the {MAX_READ_BYTES}-byte limit")));
+        }
         Ok(bytes)
     }
 
@@ -218,6 +227,16 @@ mod tests {
         assert!(ro.write("w.txt", b"x").is_err());
         let none = AuthorizedWorkspace::default();
         assert!(none.read("r.txt").is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn oversized_reads_are_rejected_without_allocating() {
+        let (inside, _, ws) = roots("oversized");
+        let file = std::fs::File::create(inside.join("huge.bin")).unwrap();
+        file.set_len(MAX_READ_BYTES + 1).unwrap();
+        let err = ws.read("huge.bin").unwrap_err().to_string();
+        assert!(err.contains("too large"), "{err}");
     }
 
     #[cfg(unix)]

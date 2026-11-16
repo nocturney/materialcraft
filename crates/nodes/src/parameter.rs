@@ -5,6 +5,12 @@ use std::collections::BTreeMap;
 /// How many slider spans the hard limit extends past each end of a parameter's range
 const HARD_SPAN: f32 = 16.0;
 
+/// Native channel controls also accept a single grayscale value, broadcast by the evaluator.
+/// Other vector parameters keep their exact function output type.
+pub fn accepts_scalar_function(definition: &str, parameter: &str) -> bool {
+    matches!((definition, parameter), ("levels", "in_low" | "in_mid" | "in_high" | "out_low" | "out_high") | ("fx_map", "background"))
+}
+
 /// Clamp `v` to `[lo, hi]`; a non-finite `v` becomes `fallback`
 fn clamp_finite(v: f32, lo: f32, hi: f32, fallback: f32) -> f32 {
     if v.is_finite() { v.clamp(lo, hi) } else { fallback }
@@ -22,17 +28,19 @@ pub fn clamp_params(def: &NodeDefinition, params: &mut BTreeMap<String, Value>) 
             };
             continue;
         }
+
         if let Value::Color(c) = v {
             for x in c {
                 *x = clamp_finite(*x, -HARD_SPAN, 1.0 + HARD_SPAN, 0.0);
             }
             continue;
         }
-        // No range declared (an Input Value's default takes any number): only a value that isn't
-        // a number goes
+
+        // An unconstrained Input Value accepts any number; reject only nonnumeric values
         let ranged = p.min < p.max;
         let span = p.max - p.min;
         let (lo, hi) = if ranged { (p.min - HARD_SPAN * span, p.max + HARD_SPAN * span) } else { (f32::MIN, f32::MAX) };
+
         // The default's component `i`, or 0 when the default is a different variant
         let fallback = |i: usize| match &p.default {
             Value::Float(d) => [*d].get(i).copied(),

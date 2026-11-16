@@ -56,11 +56,12 @@ pub fn poll(app: &mut MaterialCraftApp, ctx: &egui::Context) {
     let reqs: Vec<ControlRequest> = rx.try_iter().collect();
     for r in reqs {
         if r.method == "ui.screenshot" {
-            // Captured from the UI pass (`request_screenshots`), where viewport commands land.
+            // Captured from the UI pass (`request_screenshots`), where viewport commands land
             app.pending_screenshots.push(r.reply);
             ctx.request_repaint();
             continue;
         }
+
         let reply = handle(app, ctx, &r.method, &r.params);
         let _ = r.reply.send(reply);
         ctx.request_repaint();
@@ -72,6 +73,7 @@ pub fn request_screenshots(app: &mut MaterialCraftApp, ctx: &egui::Context) {
     if app.pending_screenshots.is_empty() {
         return;
     }
+
     let replies = std::mem::take(&mut app.pending_screenshots);
     let repaint = ctx.clone();
     let callback = egui::ScreenshotCallback::new(move |img| {
@@ -81,6 +83,7 @@ pub fn request_screenshots(app: &mut MaterialCraftApp, ctx: &egui::Context) {
         for r in &replies {
             let _ = r.send(answer.clone());
         }
+
         repaint.request_repaint();
     });
     ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(callback));
@@ -140,6 +143,7 @@ fn modifiers(v: &Value) -> Modifiers {
 /// Frames of input for a list of event descriptions. Each press, release and move lands on its
 /// own frame, so egui sees real clicks and drags.
 pub fn parse_events(list: &[Value]) -> Result<Vec<Scripted>, String> {
+    const MAX_INPUT_FRAMES: usize = 10_000;
     let mut frames = Vec::new();
     let frame = |events: Vec<Event>, _modifiers: Modifiers| Scripted { events };
     for (i, e) in list.iter().enumerate() {
@@ -204,10 +208,12 @@ pub fn parse_events(list: &[Value]) -> Result<Vec<Scripted>, String> {
             }
             other => return Err(format!("event {i}: unknown type `{other}`")),
         }
-        if frames.len() > 10_000 {
+
+        if frames.len() > MAX_INPUT_FRAMES {
             return Err("too many input events".into());
         }
     }
+
     Ok(frames)
 }
 
@@ -262,9 +268,13 @@ fn handle_inner(app: &mut MaterialCraftApp, ctx: &egui::Context, method: &str, p
                     if id == "view.previewSize" {
                         app.ui.prefs.preview_size = app.session.preview_size.unwrap_or(0);
                     }
+                    if id == "library.cache.configure" {
+                        app.ui.prefs.library_cache = app.session.library_cache_prefs;
+                    }
                     if id == "session.history" {
                         app.ui.prefs.history = app.session.history_prefs;
                     }
+
                     app.close_subgraph_after(id);
                     ok(v)
                 }
@@ -336,6 +346,7 @@ fn handle_inner(app: &mut MaterialCraftApp, ctx: &egui::Context, method: &str, p
             if !crate::menus::implemented(id) {
                 return err(format!("menu item `{id}` is not implemented"));
             }
+
             let modality = crate::shell::modality::Modality::capture(app, ctx);
             if let crate::shell::modality::Modality::Blocked(blocker) = modality
                 && !modality.allows(id)
@@ -351,6 +362,7 @@ fn handle_inner(app: &mut MaterialCraftApp, ctx: &egui::Context, method: &str, p
             if p.is_object() {
                 merge_json(&mut cur, p);
             }
+
             match serde_json::from_value::<crate::state::UiState>(cur) {
                 Ok(mut ui) => {
                     ui.graph_camera = ui.graph_camera.sanitized();
@@ -399,7 +411,8 @@ mod tests {
             json!({"type": "scroll", "pos": [5, 5], "delta": [0, -60]}),
         ];
         let f = parse_events(&list).unwrap();
-        // click: move, press, release; drag: move, press, 4 moves, release; key: 2; text 1; scroll 1.
+
+        // click: move, press, release; drag: move, press, 4 moves, release; key: 2; text 1; scroll 1
         assert_eq!(f.len(), 3 + 7 + 2 + 1 + 1);
         assert!(parse_events(&[json!({"type": "key", "key": "NoSuchKey"})]).is_err());
         assert!(parse_events(&[json!({"type": "click"})]).is_err());
@@ -469,6 +482,39 @@ mod tests {
         assert!(!app.ui.prefs.thumbnails);
         assert_eq!(app.ui.prefs.ui_scale, 1.5);
         assert_eq!(app.ui.prefs.autosave_minutes, 9);
+    }
+
+    #[test]
+    fn cache_commands_and_saved_preferences_stay_in_sync() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        let reply = handle(&mut app, &ctx, "command.run", &json!({"id": "library.cache.configure", "params": {"diskMib": 256, "maxPreviews": 8000}}));
+
+        assert_eq!(reply["ok"], json!(true), "{reply}");
+
+        app.apply_prefs();
+
+        assert_eq!(app.ui.prefs.library_cache, app.session.library_cache_prefs);
+        assert_eq!(app.ui.prefs.library_cache.disk_mib, 256);
+
+        let saved: crate::UiState = serde_json::from_value(serde_json::to_value(&app.ui).unwrap()).unwrap();
+        let mut restored = MaterialCraftApp::headless(materialcraft_engine::sample_session(), saved);
+
+        assert_eq!(restored.session.library_cache_prefs, app.session.library_cache_prefs);
+
+        let reply = handle(&mut restored, &ctx, "ui.set", &json!({"prefs": {"libraryCache": {"diskMib": 32}}}));
+
+        assert_eq!(reply["ok"], json!(true), "{reply}");
+
+        restored.apply_prefs();
+
+        assert_eq!(restored.session.library_cache_prefs.disk_mib, 32);
+        assert_eq!(restored.session.library_cache_prefs.max_previews, 8000);
+
+        let reply = handle(&mut restored, &ctx, "command.run", &json!({"id": "library.cache.clear"}));
+
+        assert_eq!(reply["ok"], json!(true), "{reply}");
+        assert_eq!(restored.session.library_cache_clear_epoch, 1);
     }
 
     #[test]

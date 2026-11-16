@@ -30,6 +30,7 @@ pub fn decode(bytes: &[u8], linear: bool) -> Result<Image> {
         image::ImageError::Limits(_) => FormatError::Image(format!("image is larger than {MAX_SIDE} pixels")),
         e => FormatError::Image(e.to_string()),
     };
+
     let (w, h) = guard(|| open()?.into_dimensions().map_err(image_error), failed)?;
     if w == 0 || h == 0 || w > MAX_SIDE || h > MAX_SIDE {
         return Err(FormatError::Image(format!("{w}x{h} is outside 1..={MAX_SIDE} pixels")));
@@ -41,18 +42,19 @@ pub fn decode(bytes: &[u8], linear: bool) -> Result<Image> {
     if gray {
         let l = img.into_luma16();
         let data: Vec<f32> = l.pixels().map(|p| p.0[0] as f32 / 65535.0).collect();
-        return Ok(Image { w, h, kind: Kind::Gray, data: Arc::new(data) });
+        return Ok(Image { w, h, kind: Kind::Gray, integer_sampling: false, data: Arc::new(data) });
     }
 
     let mut data = img.into_rgba32f().into_raw();
     if !(float || linear) {
-        for px in data.chunks_exact_mut(4) {
+        for px in data.as_chunks_mut::<4>().0 {
             for c in px.iter_mut().take(3) {
                 *c = srgb_to_linear(*c);
             }
         }
     }
-    Ok(Image { w, h, kind: Kind::Color, data: Arc::new(data) })
+
+    Ok(Image { w, h, kind: Kind::Color, integer_sampling: false, data: Arc::new(data) })
 }
 
 /// Encode `img` as `ext` (see [`EXPORT_FORMATS`]). `srgb`: color values are written through the sRGB curve (base color); data maps (normal, roughness…) are written linear

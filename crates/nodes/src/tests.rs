@@ -9,8 +9,45 @@ fn cook(def: &NodeDefinition, inputs: &[Option<Image>], size: u32) -> CookResult
     let params = resolve_params(def, &BTreeMap::new());
     let no_res = |_: &str| None;
     let vars = BTreeMap::new();
-    let ctx = CookContext { w: size, h: size, seed: 7, tile: true, inputs, params: &params, resource: &no_res, vars: &vars };
+    let ctx = CookContext {
+        format: materialcraft_core::OutputFormat::F32,
+        w: size,
+        h: size,
+        seed: 7,
+        tile: true,
+        inputs,
+        params: &params,
+        resource: &no_res,
+        vars: &vars,
+    };
+
     (def.cook)(&ctx)
+}
+
+#[test]
+fn nearest_transform_mip_keeps_the_last_column_of_an_odd_width_input() {
+    let definition = find("transformation").unwrap();
+    let mut params = resolve_params(definition, &BTreeMap::new());
+    params.insert("filtering".into(), Value::Enum(1));
+    let inputs = [Some(Image::gray(3, 1, |x, _| if x == 2 { 1.0 } else { 0.0 }))];
+    let vars = BTreeMap::new();
+    let resource = |_: &str| None;
+    let context = CookContext {
+        format: materialcraft_core::OutputFormat::F32,
+        w: 2,
+        h: 2,
+        seed: 0,
+        tile: false,
+        inputs: &inputs,
+        params: &params,
+        resource: &resource,
+        vars: &vars,
+    };
+
+    let output = (definition.cook)(&context).unwrap();
+
+    assert_eq!(output[0].get(0, 0, false)[0], 0.0);
+    assert_eq!(output[0].get(1, 0, false)[0], 1.0);
 }
 
 /// Image nodes cook finite outputs at the requested size; an empty processor reports its missing result
@@ -58,6 +95,7 @@ fn every_node_survives_hostile_params() {
         if matches!(def.id, "graph_instance" | "value_processor" | "input_value") {
             continue;
         }
+
         for p in &def.params {
             for h in [1e30_f32, -1e30, f32::NAN] {
                 let v = match p.default {
@@ -73,14 +111,28 @@ fn every_node_survives_hostile_params() {
                 let inputs = vec![None; def.inputs.len()];
                 let no_res = |_: &str| None;
                 let vars = BTreeMap::new();
-                let ctx = CookContext { w: 16, h: 16, seed: 7, tile: true, inputs: &inputs, params: &params, resource: &no_res, vars: &vars };
+                let ctx = CookContext {
+                    format: materialcraft_core::OutputFormat::F32,
+                    w: 16,
+                    h: 16,
+                    seed: 7,
+                    tile: true,
+                    inputs: &inputs,
+                    params: &params,
+                    resource: &no_res,
+                    vars: &vars,
+                };
+
                 let t = Instant::now();
                 let out = (def.cook)(&ctx).unwrap_or_else(|e| panic!("{}.{}={h}: {e}", def.id, p.id));
                 let dt = t.elapsed();
+
                 assert!(dt < Duration::from_secs(2), "{}.{}={h} took {dt:?}", def.id, p.id);
+
                 if dt > Duration::from_millis(250) {
                     slow.push((format!("{}.{}={h}", def.id, p.id), dt));
                 }
+
                 for img in &out {
                     assert_eq!((img.w, img.h), (16, 16), "{}.{}={h}", def.id, p.id);
                     assert!(img.data.iter().all(|x| x.is_finite()), "{}.{}={h} produced a non-finite value", def.id, p.id);
@@ -88,6 +140,7 @@ fn every_node_survives_hostile_params() {
             }
         }
     }
+
     eprintln!("hostile params: total {:?}; cooks over 250 ms: {slow:?}", total.elapsed());
 }
 
@@ -101,8 +154,20 @@ fn blend_and_levels_math() {
     let no_res = |_: &str| None;
     let vars = BTreeMap::new();
     let inputs = [Some(fg), Some(bg), None];
-    let ctx = CookContext { w: 4, h: 4, seed: 0, tile: true, inputs: &inputs, params: &params, resource: &no_res, vars: &vars };
+    let ctx = CookContext {
+        format: materialcraft_core::OutputFormat::F32,
+        w: 4,
+        h: 4,
+        seed: 0,
+        tile: true,
+        inputs: &inputs,
+        params: &params,
+        resource: &no_res,
+        vars: &vars,
+    };
+
     let out = (def.cook)(&ctx).unwrap();
+
     assert!((out[0].data[0] - 0.125).abs() < 1e-6);
     assert!((atomic::levels_fn(0.5, 0.0, 0.5, 1.0, 0.0, 1.0) - 0.5).abs() < 1e-5);
     assert_eq!(atomic::levels_fn(0.2, 0.4, 0.5, 0.8, 0.0, 1.0), 0.0);

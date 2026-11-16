@@ -1,7 +1,6 @@
 //! The session: the open package, the graph being edited, selection, views, snapshot undo and
 //! the cook cache.
 
-use std::collections::HashMap;
 use std::sync::{Arc, Mutex, PoisonError};
 
 use materialcraft_core::{Graph, NodeId, Package, ResourceBytes};
@@ -143,6 +142,9 @@ pub struct Session {
     /// 3D view camera preferences (set with [`Session::set_camera_prefs`]).
     pub camera: CameraPrefs,
     pub history_prefs: crate::HistoryPrefs,
+    pub library_cache_prefs: crate::LibraryCachePrefs,
+    /// Requests handled by the UI without editing packages or their undo histories.
+    pub library_cache_clear_epoch: u64,
     pub modified: bool,
     pub log: Vec<String>,
     /// What the last opened SBS package held that MaterialCraft couldn't read; empty after a clean open.
@@ -164,7 +166,7 @@ pub struct Session {
     pub library: Arc<crate::node_library::NodeLibrary>,
     pub(crate) history: crate::document_history::DocumentHistory,
     group: Option<(Snapshot, bool)>,
-    decoded: Arc<Mutex<HashMap<(u64, bool), Image>>>,
+    decoded: Arc<Mutex<crate::decoded_images::DecodedImages>>,
 }
 
 impl Session {
@@ -182,6 +184,7 @@ impl Session {
                 library_sources.insert(path.clone(), package.clone());
             }
         }
+
         let mut session = Session {
             environment: Default::default(),
             document_id: 0,
@@ -204,6 +207,8 @@ impl Session {
             preview_size: Some(512),
             camera: CameraPrefs::default(),
             history_prefs: crate::HistoryPrefs::default(),
+            library_cache_prefs: crate::LibraryCachePrefs::default(),
+            library_cache_clear_epoch: 0,
             modified: false,
             log: Vec::new(),
             load_warnings: Vec::new(),
@@ -218,15 +223,18 @@ impl Session {
             library: Default::default(),
             history: Default::default(),
             group: None,
-            decoded: Arc::new(Mutex::new(HashMap::new())),
+            decoded: Arc::new(Mutex::new(crate::decoded_images::DecodedImages::default())),
         };
+
         session.refresh_links();
         for warning in &library.warnings {
             session.warn(warning.clone());
         }
+
         if !library.packages.contains_key(crate::function_library::STANDARD_PACKAGE) {
             session.warn(format!("Missing function library: {} did not load", crate::function_library::STANDARD_PACKAGE));
         }
+
         session.library = library;
         session
     }
@@ -304,6 +312,7 @@ impl Session {
             }
             return result;
         }
+
         self.begin_group(label);
         let r = f(self);
         match r {
@@ -314,6 +323,7 @@ impl Session {
                 }
             }
         }
+
         r
     }
 
@@ -358,6 +368,7 @@ impl Session {
     pub fn changed(&mut self) {
         self.modified = true;
         self.dirty = true;
+
         // Publish a grouped edit only after it succeeds, so rollback cannot dirty other packages
         if self.group.is_none() {
             self.refresh_links();
@@ -423,15 +434,18 @@ impl Session {
                 .flat_map(|(file, package)| package.resources.iter().map(move |resource| (format!("{file}\0{}", resource.name), resource.bytes.clone()))),
         );
         let memo = self.decoded.clone();
+
         // Release decoded images of deleted or replaced resources
-        memo.lock().unwrap_or_else(PoisonError::into_inner).retain(|(k, _), _| res.iter().any(|(_, b)| b.content_hash() == *k));
+        let hashes = res.iter().map(|(_, bytes)| bytes.content_hash()).collect();
+        memo.lock().unwrap_or_else(PoisonError::into_inner).retain_resources(&hashes);
         move |requested: &str| {
             let (name, linear) = materialcraft_image::split_resource_key(requested);
             let (_, bytes) = res.iter().find(|(n, _)| n == name)?;
             let key = (bytes.content_hash(), linear);
             if let Some(i) = memo.lock().unwrap_or_else(PoisonError::into_inner).get(&key) {
-                return Some(i.clone());
+                return Some(i);
             }
+
             let img = materialcraft_formats::decode(bytes.as_slice(), linear).ok()?;
             memo.lock().unwrap_or_else(PoisonError::into_inner).insert(key, img.clone());
             Some(img)
@@ -441,6 +455,12 @@ impl Session {
     /// Forget every decoded resource image (the package was replaced).
     pub(crate) fn clear_decoded(&self) {
         self.decoded.lock().unwrap_or_else(PoisonError::into_inner).clear();
+    }
+
+    /// Background thumbnails need much less retention than the editable document.
+    pub(crate) fn limit_preview_caches(&mut self) {
+        self.cache = Arc::new(Mutex::new(Cache::new(32 << 20)));
+        self.decoded = Arc::new(Mutex::new(crate::decoded_images::DecodedImages::new(16 << 20)));
     }
 
     /// Cook the open graph now (at the preview size), on this thread.
@@ -461,6 +481,7 @@ impl Session {
         if result.graph != self.graph || result.cancelled() {
             return;
         }
+
         self.cooked_graph = Some(result.graph);
         self.cooked = result.cooked;
         self.material_cooked = result.materials;

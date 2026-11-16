@@ -16,13 +16,15 @@ pub(super) fn definition() -> NodeDefinition {
 }
 
 fn hsl(context: &CookContext) -> CookResult {
-    let img = context.any_or(0, Kind::Color, [0.5, 0.5, 0.5, 1.0]).to_color();
-    let (dh, sat, lig) = (context.f("hue") - 0.5, context.f("saturation"), context.f("lightness"));
-    Ok(vec![img.map(Kind::Color, |p| {
-        let [h, s, l] = ops::rgb_to_hsl(p);
-        let s = if sat <= 0.5 { s * sat * 2.0 } else { s + (1.0 - s) * (sat - 0.5) * 2.0 };
-        let l = if lig <= 0.5 { l * lig * 2.0 } else { l + (1.0 - l) * (lig - 0.5) * 2.0 };
-        let c = ops::hsl_to_rgb(h + dh, s.clamp(0.0, 1.0), l.clamp(0.0, 1.0));
-        [c[0], c[1], c[2], p[3]]
+    let image = context.any_or(0, Kind::Color, [0.5, 0.5, 0.5, 1.0]).to_color();
+
+    // The normalized slider spans one full turn in either direction from its midpoint
+    let (hue_shift, saturation, lightness) = ((context.f("hue") - 0.5) * 2.0, context.f("saturation"), context.f("lightness"));
+    Ok(vec![image.map(Kind::Color, |pixel| {
+        let [h, s, l] = ops::rgb_to_hsl(pixel);
+        let s = if saturation <= 0.5 { s * saturation * 2.0 } else { s + (1.0 - s) * (saturation - 0.5) * 2.0 };
+        let l = if lightness <= 0.5 { l * lightness * 2.0 } else { l + (1.0 - l) * (lightness - 0.5) * 2.0 };
+        let color = ops::hsl_to_rgb(h + hue_shift, s.clamp(0.0, 1.0), l.clamp(0.0, 1.0));
+        [color[0], color[1], color[2], pixel[3]]
     })])
 }

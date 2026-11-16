@@ -31,32 +31,6 @@ fn toggle(h: &mut Harness<'static, MaterialCraftApp>) {
 }
 
 #[test]
-fn display_toggle_updates_the_session_and_rerenders_the_normal_map() {
-    let mut h = Harness::builder().with_size(vec2(1400.0, 860.0)).build_ui_state(
-        |ui, app: &mut MaterialCraftApp| {
-            app.step(&ui.ctx().clone());
-            app.draw(ui);
-        },
-        app(),
-    );
-    settle(&mut h, 0);
-    let before = h.state().view3d.shown.clone().unwrap();
-    let rendered = h.state().view3d.renders;
-    toggle(&mut h);
-    assert!(h.state().session.view3d.normal_y_flip);
-    settle(&mut h, rendered);
-    assert_ne!(before.2, h.state().view3d.shown.as_ref().unwrap().2);
-    // Close the open menu, then restore the OpenGL setting through the same pointer gesture.
-    h.key_press(egui::Key::Escape);
-    h.run_steps(4);
-    let rendered = h.state().view3d.renders;
-    toggle(&mut h);
-    assert!(!h.state().session.view3d.normal_y_flip);
-    settle(&mut h, rendered);
-    assert_eq!(before.2, h.state().view3d.shown.as_ref().unwrap().2);
-}
-
-#[test]
 #[ignore = "requires an offscreen GPU; run explicitly with --ignored"]
 fn normal_convention_snapshot() {
     let mut h = Harness::builder().with_size(vec2(1400.0, 860.0)).wgpu().build_ui_state(

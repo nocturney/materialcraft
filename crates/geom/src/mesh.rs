@@ -59,6 +59,7 @@ impl Mesh {
         if self.positions.is_empty() {
             return (Vec3::ZERO, Vec3::ZERO);
         }
+
         self.positions.iter().fold((Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)), |(lo, hi), p| (lo.min(*p), hi.max(*p)))
     }
 
@@ -97,33 +98,40 @@ impl Mesh {
                 self.tangents.len()
             )));
         }
+
         if !self.colors.is_empty() && self.colors.len() != n {
             return Err(GeomError::Invalid(format!("{} vertex colors for {n} vertices", self.colors.len())));
         }
+
         if !self.indices.len().is_multiple_of(3) {
             return Err(GeomError::Invalid("index count is not a multiple of 3".into()));
         }
+
         if self.triangle_count() > MAX_TRIANGLES {
             return Err(GeomError::Invalid(format!("mesh has more than {MAX_TRIANGLES} triangles")));
         }
+
         if let Some(bad) = self.indices.iter().find(|i| **i as usize >= n) {
             return Err(GeomError::Invalid(format!("index {bad} out of range ({n} vertices)")));
         }
+
         if self.positions.iter().any(|p| !p.is_finite()) {
             return Err(GeomError::Invalid("mesh has non-finite positions".into()));
         }
+
         for s in &self.submeshes {
             if s.start as usize + s.count as usize > self.indices.len() || s.material >= self.materials.len().max(1) {
                 return Err(GeomError::Invalid(format!("submesh {} is out of range", s.name)));
             }
         }
+
         Ok(())
     }
 
     /// Area-weighted smooth normals over the index buffer.
     pub fn compute_normals(&mut self) {
         let mut n = vec![Vec3::ZERO; self.positions.len()];
-        for t in self.indices.chunks_exact(3) {
+        for t in self.indices.as_chunks::<3>().0 {
             let (a, b, c) = (t[0] as usize, t[1] as usize, t[2] as usize);
             let (Some(pa), Some(pb), Some(pc)) = (self.positions.get(a), self.positions.get(b), self.positions.get(c)) else { continue };
             let face = (*pb - *pa).cross(*pc - *pa);
@@ -133,6 +141,7 @@ impl Mesh {
                 }
             }
         }
+
         self.normals = n.into_iter().map(|v| v.try_normalize().unwrap_or(Vec3::Y)).collect();
     }
 
@@ -145,14 +154,16 @@ impl Mesh {
         if self.uvs.len() != self.positions.len() {
             self.uvs = vec![Vec2::ZERO; self.positions.len()];
         }
-        // mikktspace crashes (out-of-bounds) when every triangle is degenerate; skip it then.
+
+        // mikktspace crashes (out-of-bounds) when every triangle is degenerate; skip it then
         let usable = !crate::unwrap::all_triangles_degenerate(self);
         let mut g = Mikk { mesh: self };
         if !usable || !mikktspace::generate_tangents(&mut g) {
             self.simple_tangents();
         }
+
         for (t, n) in self.tangents.iter_mut().zip(&self.normals) {
-            // Orthonormalize against the normal; repair degenerate results.
+            // Orthonormalize against the normal; repair degenerate results
             let v = t.truncate();
             let o = (v - *n * n.dot(v)).try_normalize().unwrap_or_else(|| n.any_orthonormal_vector());
             *t = o.extend(if t.w < 0.0 { -1.0 } else { 1.0 });
@@ -161,7 +172,7 @@ impl Mesh {
 
     fn simple_tangents(&mut self) {
         let mut acc = vec![Vec3::ZERO; self.positions.len()];
-        for t in self.indices.chunks_exact(3) {
+        for t in self.indices.as_chunks::<3>().0 {
             let (a, b, c) = (t[0] as usize, t[1] as usize, t[2] as usize);
             let (Some(pa), Some(pb), Some(pc)) = (self.positions.get(a), self.positions.get(b), self.positions.get(c)) else { continue };
             let (Some(ua), Some(ub), Some(uc)) = (self.uvs.get(a), self.uvs.get(b), self.uvs.get(c)) else { continue };
@@ -171,6 +182,7 @@ impl Mesh {
             if r.abs() < 1e-12 {
                 continue;
             }
+
             let tan = (e1 * d2.y - e2 * d1.y) / r;
             for v in [a, b, c] {
                 if let Some(x) = acc.get_mut(v) {
@@ -178,6 +190,7 @@ impl Mesh {
                 }
             }
         }
+
         self.tangents = acc.into_iter().map(|t| t.try_normalize().unwrap_or(Vec3::X).extend(1.0)).collect();
     }
 
@@ -210,14 +223,16 @@ impl Mesh {
                 *x = true;
             }
         }
+
         let mut shared = vec![false; self.positions.len()];
-        for (_, tri) in self.indices.chunks_exact(3).enumerate().filter(|(t, _)| !is_mine.get(*t).copied().unwrap_or(false)) {
+        for (_, tri) in self.indices.as_chunks::<3>().0.iter().enumerate().filter(|(t, _)| !is_mine.get(*t).copied().unwrap_or(false)) {
             for v in tri {
                 if let Some(s) = shared.get_mut(*v as usize) {
                     *s = true;
                 }
             }
         }
+
         let mut copies = std::collections::HashMap::new();
         for k in mine.iter().flat_map(|t| t * 3..t * 3 + 3) {
             let Some(&v) = self.indices.get(k) else { continue };
@@ -226,13 +241,15 @@ impl Mesh {
                 *i = v;
             }
         }
-        // (vertex, centroid of its first triangle), each vertex once.
+
+        // (vertex, centroid of its first triangle), each vertex once
         let mut verts = Vec::with_capacity(mine.len() * 3);
         for t in &mine {
             let Some(tri) = self.tri(*t) else { continue };
             let centroid = tri.iter().map(|v| self.uvs.get(*v).copied().unwrap_or_default()).sum::<Vec2>() / 3.0;
             verts.extend(tri.map(|v| (v, centroid)));
         }
+
         verts.sort_by_key(|(v, _)| *v);
         verts.dedup_by_key(|(v, _)| *v);
         for (v, centroid) in verts {
@@ -266,7 +283,7 @@ impl Mesh {
         self.tangents.extend_from_slice(&other.tangents);
         self.uvs.extend_from_slice(&other.uvs);
         if !(self.colors.is_empty() && other.colors.is_empty()) {
-            // Vertices of the side without colors become white.
+            // Vertices of the side without colors become white
             self.colors.resize(base as usize, Vec4::ONE);
             self.colors.extend(other.colors.iter().copied().chain(std::iter::repeat(Vec4::ONE)).take(other.positions.len()));
         }
@@ -304,21 +321,26 @@ impl Mesh {
                 if has_c {
                     m.colors.push((self.colors[i] + self.colors[j]) * 0.5);
                 }
+
                 (m.positions.len() - 1) as u32
             })
         };
-        for t in self.indices.chunks_exact(3) {
+
+        for t in self.indices.as_chunks::<3>().0 {
             if t.iter().any(|&i| i as usize >= self.positions.len()) {
                 continue;
             }
+
             let (a, b, c) = (t[0], t[1], t[2]);
             let (ab, bc, ca) = (mid(&mut m, a, b), mid(&mut m, b, c), mid(&mut m, c, a));
             m.indices.extend_from_slice(&[a, ab, ca, ab, b, bc, ca, bc, c, ab, bc, ca]);
         }
+
         for s in &mut m.submeshes {
             s.start *= 4;
             s.count *= 4;
         }
+
         m
     }
 
@@ -368,21 +390,25 @@ impl mikktspace::Geometry for Mikk<'_> {
     fn num_faces(&self) -> usize {
         self.mesh.indices.len() / 3
     }
+
     fn num_vertices_of_face(&self, _face: usize) -> usize {
         3
     }
+
     fn position(&self, face: usize, vert: usize) -> [f32; 3] {
         self.mesh.positions.get(self.vi(face, vert)).copied().unwrap_or_default().to_array()
     }
+
     fn normal(&self, face: usize, vert: usize) -> [f32; 3] {
         self.mesh.normals.get(self.vi(face, vert)).copied().unwrap_or(Vec3::Y).to_array()
     }
+
     fn tex_coord(&self, face: usize, vert: usize) -> [f32; 2] {
-        // MikkTSpace expects OpenGL texture coordinates (v up); our UVs are glTF (v down). With
-        // v flipped, the bitangent `cross(N, T) * w` points up the image, as glTF requires.
+        // Flip glTF V coordinates for MikkTSpace so the bitangent points up
         let uv = self.mesh.uvs.get(self.vi(face, vert)).copied().unwrap_or_default();
         [uv.x, 1.0 - uv.y]
     }
+
     fn set_tangent_encoded(&mut self, tangent: [f32; 4], face: usize, vert: usize) {
         let i = self.vi(face, vert);
         if let Some(t) = self.mesh.tangents.get_mut(i) {
@@ -422,10 +448,12 @@ mod tests {
     #[test]
     fn subdivision_shares_edge_midpoints() {
         let m = quad().subdivided();
-        // 4 corners + 5 edge midpoints (the diagonal is shared), 8 triangles.
+
+        // 4 corners + 5 edge midpoints (the diagonal is shared), 8 triangles
         assert_eq!((m.positions.len(), m.triangle_count()), (9, 8));
         assert_eq!(m.uvs.len(), 9);
         assert_eq!((m.submeshes[0].start, m.submeshes[0].count), (0, 24));
+
         m.validate().unwrap();
     }
 
@@ -444,40 +472,54 @@ mod tests {
         let mut a = quad();
         let b = quad();
         a.append(&b);
+
         assert_eq!(a.indices[6], 4);
         assert_eq!(a.submeshes[1].material, 1);
         assert_eq!(a.submeshes[1].start, 6);
+
         a.validate().unwrap();
-        // Colors on one side only: the other side's vertices become white.
+
+        // Colors on one side only: the other side's vertices become white
         let mut red = quad();
         red.colors = vec![Vec4::new(1.0, 0.0, 0.0, 1.0); 4];
         a.append(&red);
+
         assert_eq!(a.colors.len(), 12);
         assert_eq!((a.colors[0], a.colors[8]), (Vec4::ONE, Vec4::new(1.0, 0.0, 0.0, 1.0)));
+
         a.append(&quad());
+
         assert_eq!(a.colors[15], Vec4::ONE);
+
         a.validate().unwrap();
         a.colors.pop();
+
         assert!(a.validate().is_err());
     }
 
     #[test]
     fn material_uvs_remap_and_split_shared_vertices() {
-        // quad(): two triangles sharing an edge; put the second in its own material.
+        // quad(): two triangles sharing an edge; put the second in its own material
         let mut m = quad();
         m.materials = vec!["a".into(), "b".into()];
         m.submeshes = vec![SubMesh { name: "a".into(), material: 0, start: 0, count: 3 }, SubMesh { name: "b".into(), material: 1, start: 3, count: 3 }];
         let before = m.clone();
         m.map_material_uvs(1, |uv| uv + Vec2::X);
         m.validate().unwrap();
+
         assert_eq!(m.vertex_count(), 6, "the two shared vertices are split");
         assert_eq!(&m.indices[..3], &before.indices[..3]);
+
         for k in 0..3 {
             let (old, new) = (before.indices[k] as usize, m.indices[k] as usize);
+
             assert_eq!(m.uvs[new], before.uvs[old], "material a keeps its UVs");
+
             let (old, new) = (before.indices[3 + k] as usize, m.indices[3 + k] as usize);
+
             assert_eq!((m.uvs[new], m.positions[new]), (before.uvs[old] + Vec2::X, before.positions[old]));
         }
+
         assert_eq!(m.uv_tiles(1).into_iter().collect::<Vec<_>>(), vec![(1, 0)]);
         assert_eq!(m.uv_tiles(0).into_iter().collect::<Vec<_>>(), vec![(0, 0)]);
     }

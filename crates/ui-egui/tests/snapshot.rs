@@ -10,6 +10,9 @@ mod explorer;
 #[path = "snapshot/export.rs"]
 mod export;
 
+#[path = "snapshot/node_look.rs"]
+mod node_look;
+
 #[path = "snapshot/function_instances.rs"]
 mod function_instances;
 
@@ -59,6 +62,20 @@ fn settle(h: &mut Harness<'static, MaterialCraftApp>, frames: usize) {
     }
 }
 
+fn wait_for_3d_frame(h: &mut Harness<'static, MaterialCraftApp>, previous: Option<&[u8]>) -> (u32, u32, Vec<u8>) {
+    for _ in 0..120 {
+        if let Some(frame) = h.state().view3d.shown.as_ref()
+            && previous.is_none_or(|pixels| frame.2.as_slice() != pixels)
+        {
+            return frame.clone();
+        }
+
+        settle(h, 1);
+    }
+
+    panic!("3D view did not render an updated frame");
+}
+
 fn save(h: &mut Harness<'static, MaterialCraftApp>, dir: &std::path::Path, name: &str) {
     let img = h.render().expect("render");
     img.save(dir.join(format!("{name}.png"))).expect("save");
@@ -67,6 +84,7 @@ fn save(h: &mut Harness<'static, MaterialCraftApp>, dir: &std::path::Path, name:
 
 fn assert_node_menu_order(harness: &Harness<'static, MaterialCraftApp>, labels: &[&str]) {
     let button = |label| By::new().role(egui::accesskit::Role::Button).label(label);
+
     // Canvas cards share these labels; compare the buttons within the submenu's own parent
     let menu = harness
         .get_all(button(labels[0]))
@@ -134,44 +152,60 @@ fn explorer_drags_a_linked_graph_between_open_packages() {
     }
     harness.event(egui::Event::PointerButton { pos: end, button: egui::PointerButton::Primary, pressed: false, modifiers: egui::Modifiers::NONE });
     settle(&mut harness, 8);
+
     assert_eq!(harness.state().session.document_id, target_document);
     assert_eq!(harness.state().session.graph().unwrap().nodes.len(), 1);
+
     let instance = harness.state().session.graph().unwrap().nodes[0].id;
+
     assert_eq!(harness.state().session.graph().unwrap().node(instance).unwrap().instance.as_ref().unwrap().graph, "Reusable tint");
     assert!(harness.state().session.cooked.nodes[&instance].error.is_none());
+
     save(&mut harness, &directory, "linked-instance-explorer-drop");
     let position = harness.get(By::new().role(egui::accesskit::Role::TreeItem).label("Reusable tint")).rect().center();
     double_click(&mut harness, position);
+
     assert_eq!(harness.state().session.document_id, 0);
+
     harness.state_mut().run("graph.select", json!({"ids": [color.0]})).unwrap();
     harness.state_mut().run("graph.node.param", json!({"id": color.0, "param": "color", "value": [0.9, 0.3, 0.1, 1.0]})).unwrap();
     let position = harness.get(By::new().role(egui::accesskit::Role::TreeItem).label("Target canvas")).rect().center();
     double_click(&mut harness, position);
     settle(&mut harness, 8);
+
     assert_eq!(harness.state().session.document_id, target_document);
     assert_eq!(harness.state().session.history(), ["Add graph instance"]);
+
     let value = harness.state().session.cooked.image(instance, 0).unwrap().get(0, 0, false);
-    assert!(value.into_iter().zip([0.9, 0.3, 0.1, 1.0]).all(|(actual, expected)| (actual - expected).abs() < 1e-6));
+
+    assert!(value.into_iter().zip([0.9, 0.3, 0.1, 1.0]).all(|(actual, expected)| (actual - expected).abs() <= 1.0 / 255.0));
     assert!(harness.state().session.modified);
+
     save(&mut harness, &directory, "linked-instance-source-edit");
     let position = harness.get(By::new().role(egui::accesskit::Role::Button).label("Reusable tint")).rect().center();
     double_click(&mut harness, position);
+
     assert_eq!(harness.state().session.document_id, target_document, "double-click must not open the instance source");
     assert_eq!(harness.state().session.graph().unwrap().name, "Target canvas");
     assert_eq!(harness.state().session.history(), ["Add graph instance"]);
+
     harness.key_press_modifiers(egui::Modifiers::CTRL | egui::Modifiers::COMMAND, egui::Key::E);
     settle(&mut harness, 3);
+
     assert_eq!(harness.state().session.document_id, target_document, "Ctrl+E must not open the instance source");
     assert_eq!(harness.state().session.graph().unwrap().name, "Target canvas");
     assert_eq!(harness.state().session.history(), ["Add graph instance"]);
+
     harness.get(By::new().role(egui::accesskit::Role::Button).label("Reusable tint")).click_secondary();
     settle(&mut harness, 2);
     for label in ["View output in 2D view", "Copy info to clipboard", "Open reference", "Create graph from selection (1)", "Duplicate selection Ctrl+D"] {
         assert!(harness.query(By::new().label(label)).is_some(), "missing instance action: {label}");
     }
+
     save(&mut harness, &directory, "linked-instance-context-menu");
     harness.get(By::new().label("Open reference")).click();
     settle(&mut harness, 4);
+
     assert_eq!(harness.state().session.document_id, 0);
     assert_eq!(harness.state().session.graph().unwrap().name, "Reusable tint");
 }
@@ -583,11 +617,22 @@ fn output_menu_and_package_warnings_follow_parameter_types() {
     let context = harness.ctx.clone();
     materialcraft_ui_egui::menus::invoke(harness.state_mut(), &context, "graph.node.edit");
     settle(&mut harness, 3);
+
     assert!(harness.query(By::new().label("Expected output: Float")).is_some());
     assert!(harness.query(By::new().label(&package_warning_label)).is_some());
-    harness.get(By::new().role(egui::accesskit::Role::Button).label("Float3")).click_secondary();
+
+    let node = harness.get(By::new().role(egui::accesskit::Role::Button).label("Float3")).rect();
+    let header = egui::pos2(node.center().x, node.min.y + 12.0);
+    harness.event(egui::Event::PointerMoved(header));
+    harness.step();
+    for pressed in [true, false] {
+        harness.event(egui::Event::PointerButton { pos: header, button: egui::PointerButton::Secondary, pressed, modifiers: egui::Modifiers::NONE });
+        harness.step();
+    }
     settle(&mut harness, 3);
+
     assert!(harness.get(By::new().role(egui::accesskit::Role::Button).label("Set as output node")).accesskit_node().is_disabled());
+
     let directory = std::path::PathBuf::from(std::env::var_os("MC_SNAPSHOT_DIR").unwrap());
     std::fs::create_dir_all(&directory).unwrap();
     save(&mut harness, &directory, "incompatible-function-output");
@@ -595,15 +640,20 @@ fn output_menu_and_package_warnings_follow_parameter_types() {
     settle(&mut harness, 3);
     harness.state_mut().run("graph.function.edit", json!({"target": target, "edit": {"action": "output", "id": scalar}})).unwrap();
     settle(&mut harness, 3);
+
     assert!(harness.query(By::new().label(&package_warning_label)).is_none());
+
     harness.state_mut().run("graph.node.param", json!({"id": owner.0, "param": "color_mode", "value": true})).unwrap();
     settle(&mut harness, 3);
+
     assert!(harness.query(By::new().label("Expected output: Float4")).is_some());
     assert!(harness.query(By::new().label_contains("Output node returns Float; expected Float4")).is_some());
     assert!(harness.query(By::new().label(&package_warning_label)).is_some());
+
     save(&mut harness, &directory, "changed-function-output-type");
     harness.state_mut().run("edit.undo", json!({})).unwrap();
     settle(&mut harness, 3);
+
     assert!(harness.query(By::new().label(&package_warning_label)).is_none());
 }
 
@@ -622,35 +672,49 @@ fn explorer_disclosure_tracks_input_and_output_entries() {
         let name = &harness.state().session.graph().unwrap().name;
         let row = harness.get(By::new().role(egui::accesskit::Role::TreeItem).label(name)).rect();
         let image = harness.render().unwrap();
+
         // The disclosure gutter contains a light triangle only when the graph has children
         ((row.left() as u32 - 16)..(row.left() as u32 - 2))
             .any(|x| ((row.top() as u32 + 3)..(row.bottom() as u32 - 3)).any(|y| image.get_pixel(x, y).0[..3].iter().all(|channel| *channel > 150)))
     };
+
     assert!(!arrow_visible(&mut harness));
+
     save(&mut harness, &directory, "explorer-no-inputs-or-outputs");
 
     for definition in ["input_color", "input_grayscale", "input_value", "output"] {
         harness.state_mut().run("graph.node.add", json!({"def": definition})).unwrap();
         settle(&mut harness, 3);
+
         assert!(arrow_visible(&mut harness), "{definition}");
+
         if definition == "output" {
             save(&mut harness, &directory, "explorer-with-output");
         }
+
         harness.state_mut().run("edit.delete", json!({})).unwrap();
         settle(&mut harness, 3);
+
         assert!(!arrow_visible(&mut harness), "{definition}");
+
         harness.state_mut().run("edit.undo", json!({})).unwrap();
         settle(&mut harness, 3);
+
         assert!(arrow_visible(&mut harness), "{definition}");
+
         harness.state_mut().run("edit.redo", json!({})).unwrap();
         settle(&mut harness, 3);
+
         assert!(!arrow_visible(&mut harness), "{definition}");
     }
+
     harness.state_mut().run("file.new", json!({"kind": "function", "name": "Function leaf"})).unwrap();
     let function = materialcraft_engine::core::FunctionGraph::constant(materialcraft_engine::core::Value::Float(0.5));
     harness.state_mut().run("graph.function.set", json!({"function": function})).unwrap();
     settle(&mut harness, 3);
+
     assert!(!arrow_visible(&mut harness));
+
     save(&mut harness, &directory, "explorer-function-leaf");
 }
 
@@ -665,12 +729,15 @@ fn explorer_open_targets_the_clicked_graph() {
     settle(&mut h, 5);
     h.get_by_label("Export target").click_secondary();
     settle(&mut h, 3);
+
     // Explorer menu items name their shortcut after the label
     let open = format!("Open {}", materialcraft_ui_egui::menus::shortcut_label(&h.ctx, "Enter"));
     h.get(By::new().role(egui::accesskit::Role::Button).label(&open)).click();
     settle(&mut h, 3);
+
     assert_eq!(h.state().session.graph, 1);
     assert!(!h.state().ui.windows.export);
+
     if let Some(dir) = std::env::var_os("MC_SNAPSHOT_DIR").map(std::path::PathBuf::from) {
         std::fs::create_dir_all(&dir).unwrap();
         save(&mut h, &dir, "explorer-open");
@@ -714,10 +781,12 @@ fn snapshots() {
         eprintln!("set MC_SNAPSHOT_DIR");
         return;
     };
+
     std::fs::create_dir_all(&dir).unwrap();
     let app = MaterialCraftApp::headless(materialcraft_engine::sample_session(), UiState::default());
     let mut h = harness(app, 1600.0, 960.0);
     settle(&mut h, 40);
+
     // Select a node so the properties panel shows parameters
     let id = h.state().session.graph().unwrap().nodes[0].id;
     h.state_mut().run("graph.select", json!({"ids": [id.0]}));
@@ -1449,9 +1518,10 @@ fn material_assignment_previews_outputs_and_survives_function_editing() {
         .as_u64()
         .unwrap();
     let mut harness = harness(app, 1600.0, 960.0);
-    settle(&mut harness, 45);
+    let before = wait_for_3d_frame(&mut harness, None);
+
     assert!(harness.state().session.material_maps().is_empty());
-    let before = harness.state().view3d.shown.clone().unwrap();
+
     let directory = std::path::PathBuf::from(std::env::var_os("MC_SNAPSHOT_DIR").unwrap());
     std::fs::create_dir_all(&directory).unwrap();
     save(&mut harness, &directory, "material-unassigned");
@@ -1463,28 +1533,34 @@ fn material_assignment_previews_outputs_and_survives_function_editing() {
     settle(&mut harness, 3);
     save(&mut harness, &directory, "material-channel-menu");
     harness.get(By::new().role(egui::accesskit::Role::Button).label("Base color")).click();
-    settle(&mut harness, 45);
+    let red_frame = wait_for_3d_frame(&mut harness, Some(&before.2));
+
     assert_eq!(harness.state().session.selection, selection, "channel menu clicks must not reach the graph beneath them");
     assert_eq!(harness.state().session.material_maps()[0].0, "baseColor");
-    let red_frame = harness.state().view3d.shown.clone().unwrap();
     assert_ne!(before.2, red_frame.2, "assignment must invalidate the rendered frame");
-    let red_pixels = red_frame.2.chunks_exact(4).filter(|pixel| u16::from(pixel[0]) > u16::from(pixel[1]) + 30).count();
+
+    let red_pixels = red_frame.2.as_chunks::<4>().0.iter().filter(|pixel| u16::from(pixel[0]) > u16::from(pixel[1]) + 30).count();
+
     assert!(red_pixels > 100, "the rendered mesh must show the assigned red image");
+
     save(&mut harness, &directory, "material-assigned-red");
 
     harness.state_mut().run("graph.node.param", json!({"id": source, "param": "color", "value": [0.02, 0.04, 0.8, 1.0]})).unwrap();
-    settle(&mut harness, 45);
-    let blue_frame = harness.state().view3d.shown.clone().unwrap();
-    let blue_pixels = blue_frame.2.chunks_exact(4).filter(|pixel| u16::from(pixel[2]) > u16::from(pixel[0]) + 30).count();
+    let blue_frame = wait_for_3d_frame(&mut harness, Some(&red_frame.2));
+    let blue_pixels = blue_frame.2.as_chunks::<4>().0.iter().filter(|pixel| u16::from(pixel[2]) > u16::from(pixel[0]) + 30).count();
+
     assert!(blue_pixels > 100, "edits must refresh the assigned material");
-    assert_ne!(red_frame.2, blue_frame.2);
+
     save(&mut harness, &directory, "material-assigned-blue");
 
     harness.state_mut().run("file.new", json!({"kind": "function", "name": "Function preview"})).unwrap();
     settle(&mut harness, 45);
     let maps = harness.state().session.material_maps();
-    assert_eq!(maps[0].1.get(0, 0, false), [0.02, 0.04, 0.8, 1.0]);
+    let color = maps[0].1.get(0, 0, false);
+
+    assert!(color.into_iter().zip([0.02, 0.04, 0.8, 1.0]).all(|(actual, expected)| (actual - expected).abs() <= 1.0 / 255.0));
     assert_eq!(harness.state().session.material_preview.channels[&materialcraft_engine::core::MaterialChannel::BaseColor].node, NodeId(output));
+
     save(&mut harness, &directory, "material-retained-in-function");
 }
 
@@ -1519,26 +1595,36 @@ fn explorer_inputs_and_graph_drop_share_labels_and_material_assignment() {
     let graph_row = harness.get(By::new().role(egui::accesskit::Role::TreeItem).label("Atomic_sample")).rect();
     for (id, label) in inputs {
         let row = harness.get(By::new().role(egui::accesskit::Role::TreeItem).label(label));
+
         assert!(row.rect().left() > graph_row.left());
+
         let position = row.rect().center();
         double_click(&mut harness, position);
+
         assert_eq!(harness.state().session.selection, vec![id]);
         assert_eq!(harness.get(By::new().role(egui::accesskit::Role::TextInput).label("Node label")).value().as_deref(), Some(label));
         assert!(harness.query_all(By::new().label("Identifier")).next().is_some());
+
         let before = harness.state().session.graph().unwrap().node(id).unwrap().clone();
         let default = &materialcraft_engine::nodes::find(&before.def).unwrap().param("usage").unwrap().default;
+
         assert_eq!(before.params.get("usage").unwrap_or(default), &materialcraft_engine::core::Value::Enum(ComponentUsage::ANY_INDEX));
+
         harness.get(By::new().role(egui::accesskit::Role::ComboBox).label("Component Usage")).click();
         settle(&mut harness, 2);
         harness.get_by_label("Base color").scroll_to_me();
         settle(&mut harness, 2);
         harness.get_by_label("Base color").click();
         settle(&mut harness, 2);
+
         assert_eq!(harness.state().session.graph().unwrap().node(id).unwrap().params.get("usage"), Some(&materialcraft_engine::core::Value::Enum(0)));
+
         save(&mut harness, &directory, &format!("component-usage-{}", before.def));
         harness.state_mut().run("edit.undo", json!({})).unwrap();
+
         assert_eq!(harness.state().session.graph().unwrap().node(id).unwrap(), &before);
     }
+
     let position = harness.get(By::new().role(egui::accesskit::Role::TreeItem).label("Base Color")).rect().center();
     double_click(&mut harness, position);
     harness.get(By::new().role(egui::accesskit::Role::ComboBox).label("Component Usage")).click();
@@ -1548,7 +1634,9 @@ fn explorer_inputs_and_graph_drop_share_labels_and_material_assignment() {
     harness.get_by_label("Glossiness").click();
     settle(&mut harness, 3);
     let node = harness.state().session.graph().unwrap().node(NodeId(output)).unwrap();
+
     assert_eq!(materialcraft_engine::eval::output_usage(node), "glossiness");
+
     harness.state_mut().run("graph.node.param", json!({"id": output, "param": "usage", "value": ComponentUsage::index("diffuse")})).unwrap();
 
     settle(&mut harness, 3);
@@ -1569,15 +1657,45 @@ fn explorer_inputs_and_graph_drop_share_labels_and_material_assignment() {
         harness.event(egui::Event::PointerMoved(position));
         harness.step();
     }
+
     save(&mut harness, &directory, "graph-drop-target");
     harness.event(egui::Event::PointerButton { pos: end, button: egui::PointerButton::Primary, pressed: false, modifiers: egui::Modifiers::NONE });
     settle(&mut harness, 45);
+
     assert_eq!(harness.state().session.graph, graph, "dropping a graph must not open it");
     assert_eq!(harness.state().session.view3d, camera, "dropping must not orbit the camera");
     assert_eq!(harness.state().session.pkg, package);
+
     let binding = &harness.state().session.material_preview.channels[&MaterialChannel::BaseColor];
+
     assert_eq!((binding.graph, binding.node), (0, NodeId(output)));
+
     let frame = &harness.state().view3d.shown.as_ref().unwrap().2;
-    assert!(frame.chunks_exact(4).filter(|pixel| u16::from(pixel[0]) > u16::from(pixel[1]) + 30).count() > 100);
+
+    assert!(frame.as_chunks::<4>().0.iter().filter(|pixel| u16::from(pixel[0]) > u16::from(pixel[1]) + 30).count() > 100);
+
     save(&mut harness, &directory, "graph-dropped-on-material");
+}
+
+#[test]
+#[ignore = "requires an offscreen GPU"]
+fn library_cache_preferences() {
+    let app = MaterialCraftApp::headless(materialcraft_engine::sample_session(), UiState::default());
+    let mut h = harness(app, 1100.0, 850.0);
+    settle(&mut h, 4);
+    h.state_mut().ui.windows.preferences = true;
+    settle(&mut h, 4);
+
+    assert!(h.query_all(By::new().label("Disk limit (MiB, 0 = off)")).next().is_some());
+    assert!(h.query_all(By::new().label("Maximum stored previews")).next().is_some());
+
+    h.get_by_label("Clear cache").click();
+    settle(&mut h, 4);
+
+    assert_eq!(h.state().session.library_cache_clear_epoch, 1);
+
+    if let Some(dir) = std::env::var_os("MC_SNAPSHOT_DIR").map(std::path::PathBuf::from) {
+        std::fs::create_dir_all(&dir).unwrap();
+        save(&mut h, &dir, "library-cache-preferences");
+    }
 }

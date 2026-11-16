@@ -30,31 +30,45 @@ pub fn output_type(graph: &Graph, id: NodeId, port: &str) -> u32 {
     if let Ok(Some(kind)) = crate::output_port_value_type(graph, id, port) {
         return kind as u32;
     }
+
     let mut pending = vec![(id, port.to_string())];
     let mut visited = std::collections::BTreeSet::new();
     while let Some((id, port)) = pending.pop() {
         if !visited.insert((id, port.clone())) {
             continue;
         }
+
         let Ok(node) = graph.node(id) else { continue };
+        if node.def == "output"
+            && graph.input_of(id, "input").is_none()
+            && let Some(color) = node.params.get("color_mode").and_then(Value::as_bool)
+        {
+            return if color { 1 } else { 2 };
+        }
+
         if let Some(instance) = &node.instance {
             if instance.outputs.iter().any(|output| output.identifier == port && output.type_code == 1) {
                 return 1;
             }
+
             continue;
         }
+
         let Some(definition) = find(&node.def) else { return 1 };
         if let Some(parameter) = definition.param("color_mode") {
             if node.params.get("color_mode").unwrap_or(&parameter.default).as_bool() == Some(true) {
                 return 1;
             }
+
             continue;
         }
+
         match definition.outputs.iter().find(|output| output.id == port).map(|output| output.kind) {
             Some(PortKind::Color) => return 1,
             Some(PortKind::Gray) => continue,
             _ => {}
         }
+
         for source in definition.inputs.iter().filter(|input| input.kind != PortKind::Gray).filter_map(|input| graph.input_of(id, input.id)) {
             pending.push((source.from, source.from_port.clone()));
             if node.def != "blend" {
@@ -62,5 +76,6 @@ pub fn output_type(graph: &Graph, id: NodeId, port: &str) -> u32 {
             }
         }
     }
+
     2
 }

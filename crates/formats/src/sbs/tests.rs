@@ -77,16 +77,37 @@ fn sniffs_sbs() {
 }
 
 #[test]
-fn saving_refreshes_the_writer_version_without_changing_the_schema_version() {
-    let old = br#"<package><identifier v="Older file"/><formatVersion v="1.1.0.202401"/><updaterVersion v="0.0.1"/><content/></package>"#;
-    let reopened = read_sbs(old, "older.sbs", &no_linked_files).unwrap();
-    for package in [Package::new("New file"), reopened.pkg] {
+fn first_sbs_save_assigns_the_workspace_version_to_both_fields() {
+    let unversioned = read_sbs(b"<package><content/></package>", "unversioned.sbs", &no_linked_files).unwrap().pkg;
+    for package in [Package::new("New file"), unversioned] {
+        assert!(package.format_version.is_none());
+
         let text = String::from_utf8(write_sbs(&package).unwrap()).unwrap();
         let document = roxmltree::Document::parse(&text).unwrap();
-        let root = document.root_element();
-        assert_eq!(super::xml::child_value(root, "updaterVersion"), Some(env!("CARGO_PKG_VERSION")));
-        assert_eq!(super::xml::child_value(root, "formatVersion"), Some(super::constant::FORMAT_VERSION));
-        assert!(!text.contains("0.0.1"));
+        for field in ["formatVersion", "updaterVersion"] {
+            assert_eq!(super::xml::child_value(document.root_element(), field), Some(env!("CARGO_PKG_VERSION")));
+        }
+    }
+}
+
+#[test]
+fn later_sbs_saves_keep_the_original_format_version_and_refresh_the_updater() {
+    for baseline in ["0.0.7", "1.1.0.202401"] {
+        let old = format!(r#"<package><identifier v="Older file"/><formatVersion v="{baseline}"/><updaterVersion v="0.0.1"/><content/></package>"#);
+        let mut package = read_sbs(old.as_bytes(), "older.sbs", &no_linked_files).unwrap().pkg;
+        for _ in 0..3 {
+            assert_eq!(package.format_version.as_deref(), Some(baseline));
+
+            // Snapshot/restore and subsequent saves must retain the baseline too
+            package = serde_json::from_slice(&serde_json::to_vec(&package).unwrap()).unwrap();
+            let bytes = write_sbs(&package).unwrap();
+            let document = roxmltree::Document::parse(std::str::from_utf8(&bytes).unwrap()).unwrap();
+
+            assert_eq!(super::xml::child_value(document.root_element(), "formatVersion"), Some(baseline));
+            assert_eq!(super::xml::child_value(document.root_element(), "updaterVersion"), Some(env!("CARGO_PKG_VERSION")));
+
+            package = read_sbs(&bytes, "saved.sbs", &no_linked_files).unwrap().pkg;
+        }
     }
 }
 
@@ -252,6 +273,19 @@ fn linked_resources_load_through_the_callback() {
     assert!(not_found.pkg.resources[0].bytes.is_empty());
     assert_eq!(not_found.pkg.resources[0].source, "p.resources/img.png");
     assert!(not_found.warnings.iter().any(|w| w.contains("img")), "{:?}", not_found.warnings);
+}
+
+#[test]
+fn duplicate_resource_identifiers_get_unique_names() {
+    let resources: String = (0..2_000)
+        .map(|_| "<resource><identifier v=\"img\"/><type v=\"bitmap\"/><format v=\"png\"/><source><binembedded><strdata v=\"AAAA\"/></binembedded></source></resource>")
+        .collect();
+    let xml = format!("<package><content>{resources}</content></package>");
+    let read = read_sbs(xml.as_bytes(), "many.sbs", &no_linked_files).unwrap();
+    let names: std::collections::HashSet<&str> = read.pkg.resources.iter().map(|resource| resource.name.as_str()).collect();
+    assert_eq!(names.len(), read.pkg.resources.len(), "resource names stay unique");
+    assert!(read.pkg.resources[0].name == "img");
+    assert!(read.pkg.resources.iter().skip(1).all(|resource| resource.name.starts_with("img_")));
 }
 
 #[test]

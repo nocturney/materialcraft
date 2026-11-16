@@ -1,5 +1,3 @@
-use std::io::{Cursor, Read, Write};
-
 use super::Manifest;
 use materialcraft_core::Value;
 
@@ -11,7 +9,6 @@ pub const MATERIAL_EXT: &str = "mcmat";
 pub const FORMAT: &str = "craft-material";
 /// Newest manifest version this build reads and writes
 pub const VERSION: u32 = 2;
-const MANIFEST: &str = "material.json";
 const SOURCE: &str = "source.sbs";
 
 /// Whether maps of `usage` hold colors (stored sRGB-encoded) rather than data (linear)
@@ -50,56 +47,71 @@ pub fn portable(v: &Value) -> bool {
 
 /// Write a portable material: `manifest` (its `source` is set here), the encoded maps named by `manifest.maps[].file`, and the source package bytes
 pub fn write_material(manifest: &Manifest, maps: &[(String, Vec<u8>)], source: &[u8]) -> Result<Vec<u8>> {
-    let io = |e: zip::result::ZipError| FormatError::Io(e.to_string());
     let manifest = Manifest { source: SOURCE.into(), ..manifest.clone() };
-    let json = serde_json::to_vec_pretty(&manifest).map_err(|e| FormatError::Io(e.to_string()))?;
-    let mut buf = Cursor::new(Vec::new());
-    {
-        let mut z = zip::ZipWriter::new(&mut buf);
-        let deflate = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
-        // Maps and the package are already compressed
-        let stored = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
-        z.start_file(MANIFEST, deflate).map_err(io)?;
-        z.write_all(&json).map_err(|e| FormatError::Io(e.to_string()))?;
-        for (file, bytes) in maps {
-            z.start_file(file.as_str(), stored).map_err(io)?;
-            z.write_all(bytes).map_err(|e| FormatError::Io(e.to_string()))?;
-        }
-        z.start_file(SOURCE, stored).map_err(io)?;
-        z.write_all(source).map_err(|e| FormatError::Io(e.to_string()))?;
-        z.finish().map_err(io)?;
-    }
-    Ok(buf.into_inner())
+    let json = serde_json::to_value(manifest).map_err(|e| FormatError::Io(e.to_string()))?;
+    let shared: craft_mcmat::Manifest = serde_json::from_value(json).map_err(|e| FormatError::Io(e.to_string()))?;
+    craft_mcmat::write(&shared, maps, source).map_err(|e| FormatError::Io(e.to_string()))
 }
 
 /// Read a portable material's manifest and source package bytes
 pub fn read_material(bytes: &[u8]) -> Result<(Manifest, Vec<u8>)> {
-    let bad = |m: String| FormatError::BadPackage(format!("portable material: {m}"));
-    let mut z = zip::ZipArchive::new(Cursor::new(bytes)).map_err(|e| bad(e.to_string()))?;
-    let mut read = |name: &str, cap: u64| -> Result<Vec<u8>> {
-        let entry = z.by_name(name).map_err(|_| bad(format!("{name} is missing")))?;
-        if entry.size() > cap {
-            return Err(bad(format!("{name} exceeds {cap} bytes")));
-        }
-        let mut data = Vec::new();
-        entry.take(cap + 1).read_to_end(&mut data).map_err(|e| FormatError::Io(e.to_string()))?;
-        if data.len() as u64 > cap {
-            return Err(bad(format!("{name} exceeds {cap} bytes")));
-        }
-        Ok(data)
+    let bad = |e: craft_mcmat::Error| FormatError::BadPackage(format!("portable material: {e}"));
+    let limits = craft_mcmat::Limits {
+        min_version: VERSION,
+        max_version: VERSION,
+        max_entries: 100_000,
+        max_maps: 100_000,
+        max_manifest_bytes: MAX_JSON,
+        max_entry_bytes: MAX_RESOURCE,
+        max_total_bytes: MAX_JSON + MAX_RESOURCE,
     };
-
-    let manifest: Manifest = serde_json::from_slice(&read(MANIFEST, MAX_JSON)?).map_err(|e| bad(e.to_string()))?;
-    if manifest.format != FORMAT || manifest.version != VERSION {
-        return Err(bad(format!("unsupported {} version {}", manifest.format, manifest.version)));
-    }
-    let source = read(&manifest.source, MAX_RESOURCE)?;
+    let mut material = craft_mcmat::Material::open(bytes, limits).map_err(bad)?;
+    // Consume nested values individually to avoid copying the whole untrusted JSON manifest.
+    let parameters = std::mem::take(&mut material.manifest.parameters)
+        .into_iter()
+        .map(serde_json::from_value)
+        .collect::<std::result::Result<_, _>>()
+        .map_err(|e| FormatError::BadPackage(format!("portable material: {e}")))?;
+    let inputs = std::mem::take(&mut material.manifest.inputs)
+        .into_iter()
+        .map(serde_json::from_value)
+        .collect::<std::result::Result<_, _>>()
+        .map_err(|e| FormatError::BadPackage(format!("portable material: {e}")))?;
+    let presets = std::mem::take(&mut material.manifest.presets)
+        .into_iter()
+        .map(serde_json::from_value)
+        .collect::<std::result::Result<_, _>>()
+        .map_err(|e| FormatError::BadPackage(format!("portable material: {e}")))?;
+    let maps = std::mem::take(&mut material.manifest.maps)
+        .into_iter()
+        .map(|map| {
+            let mut fields = map.extra;
+            fields.insert("usage".into(), map.usage.into());
+            fields.insert("file".into(), map.file.into());
+            serde_json::from_value(serde_json::Value::Object(fields.into_iter().collect()))
+        })
+        .collect::<std::result::Result<_, _>>()
+        .map_err(|e| FormatError::BadPackage(format!("portable material: {e}")))?;
+    let shared = &material.manifest;
+    let manifest = Manifest {
+        format: shared.format.clone(),
+        version: shared.version,
+        name: shared.name.clone(),
+        graph: shared.graph.clone(),
+        size: shared.size,
+        maps,
+        parameters,
+        inputs,
+        presets,
+        source: shared.source.clone(),
+    };
+    let source = material.read_source().map_err(bad)?;
     Ok((manifest, source))
 }
 
 /// Whether `bytes` look like a portable material (a zip with `material.json`)
 pub fn is_material(bytes: &[u8]) -> bool {
-    zip::ZipArchive::new(Cursor::new(bytes)).is_ok_and(|mut z| z.by_name(MANIFEST).is_ok())
+    craft_mcmat::is_material(bytes, 100_000)
 }
 
 #[cfg(test)]
@@ -149,6 +161,10 @@ mod tests {
         assert_eq!(json["parameters"][0]["id"], "rough");
         assert_eq!(json["parameters"][0]["value"], serde_json::json!({"t": "float", "v": 0.25}));
 
+        // Version 1 embeds the old JSON-based .mcraft source, which this app's current
+        // SBS package reader cannot open; do not claim that accepting its manifest is enough.
+        let older = Manifest { version: 1, ..m.clone() };
+        assert!(read_material(&write_material(&older, &[], b"").unwrap()).is_err());
         let newer = Manifest { version: VERSION + 1, ..m };
         assert!(read_material(&write_material(&newer, &[], b"").unwrap()).is_err());
         assert!(!is_material(b"not a zip"));

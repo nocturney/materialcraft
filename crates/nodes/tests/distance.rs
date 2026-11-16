@@ -11,7 +11,8 @@ fn cook(mask: Image, source: Option<Image>, tile: bool, combine: bool, distance:
     let inputs = [Some(mask), source];
     let vars = BTreeMap::new();
     let resource = |_: &str| None;
-    let ctx = CookContext { w, h, seed: 0, tile, inputs: &inputs, params: &params, resource: &resource, vars: &vars };
+    let ctx =
+        CookContext { format: materialcraft_core::OutputFormat::F32, w, h, seed: 0, tile, inputs: &inputs, params: &params, resource: &resource, vars: &vars };
     (def.cook)(&ctx).unwrap().remove(0)
 }
 
@@ -19,8 +20,8 @@ fn cook(mask: Image, source: Option<Image>, tile: bool, combine: bool, distance:
 fn tiled_distance_spreads_source_across_stationary_gradient() {
     let mask = Image::gray(32, 32, |x, y| if x == 0 && y == 0 { 1.0 } else { 0.0 });
     let output = cook(mask.clone(), Some(mask), true, false, 256.0);
-    // This is within range of the only mask pixel, but the symmetric distance field has zero
-    // slope here. A gradient walk stopped on the black source background instead of the seed.
+
+    // A zero slope at the only mask pixel must not stop the walk on background
     assert_eq!(output.get_gray(16, 16, false), 1.0);
     assert!(output.data.iter().all(|&v| v == 1.0));
 }

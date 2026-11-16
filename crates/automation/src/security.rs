@@ -68,6 +68,7 @@ pub fn server_token(port: u16) -> Result<(String, Option<PathBuf>), AutomationEr
         validate_token(t.trim())?;
         return Ok((t.trim().to_string(), None));
     }
+
     let token = generate_token()?;
     let path = token_file(port);
     write_token_file(&path, &token).map_err(|e| {
@@ -111,12 +112,15 @@ fn read_token_file(path: &Path) -> std::io::Result<String> {
         if !meta.is_file() {
             return refuse("not a regular file");
         }
+
         if meta.uid() != rustix::process::geteuid().as_raw() {
             return refuse("owned by another user");
         }
+
         if meta.mode() & 0o077 != 0 {
             return refuse("readable or writable by other users");
         }
+
         file
     };
     #[cfg(not(unix))]
@@ -146,12 +150,14 @@ pub fn read_bounded_line(r: &mut impl BufRead, line: &mut String) -> std::io::Re
     if n == 0 {
         return Ok(LineRead::Eof);
     }
+
     if n > MAX_REQUEST_BYTES {
         if bytes.last() != Some(&b'\n') {
             discard_rest_of_line(r)?;
         }
         return Ok(LineRead::TooLong);
     }
+
     *line = String::from_utf8(bytes).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
     Ok(LineRead::Line)
 }
@@ -162,10 +168,12 @@ fn discard_rest_of_line(r: &mut impl BufRead) -> std::io::Result<()> {
         if buf.is_empty() {
             return Ok(());
         }
+
         if let Some(end) = buf.iter().position(|&b| b == b'\n') {
             r.consume(end + 1);
             return Ok(());
         }
+
         let n = buf.len();
         r.consume(n);
     }
@@ -179,7 +187,7 @@ pub struct Permit(Arc<AtomicUsize>);
 
 impl ConnectionLimiter {
     pub fn try_acquire(&self, max: usize) -> Option<Permit> {
-        self.0.fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| (n < max).then_some(n + 1)).ok().map(|_| Permit(self.0.clone()))
+        self.0.try_update(Ordering::AcqRel, Ordering::Acquire, |n| (n < max).then_some(n + 1)).ok().map(|_| Permit(self.0.clone()))
     }
 }
 
@@ -201,7 +209,7 @@ impl AuthDeadline {
         let stream = stream.try_clone()?;
         let (tx, rx) = channel::<()>();
         std::thread::Builder::new().name("materialcraft-auth-deadline".into()).spawn(move || {
-            // Dropping the deadline disconnects the channel and ends this thread at once.
+            // Dropping the deadline disconnects the channel and ends this thread at once
             if let Err(RecvTimeoutError::Timeout) = rx.recv_timeout(timeout) {
                 let _ = stream.shutdown(Shutdown::Both);
             }
@@ -274,24 +282,31 @@ mod tests {
     fn unsafe_token_files_are_refused() {
         use std::os::unix::fs::PermissionsExt;
         let dir = scratch("refuse");
-        // Readable by others: another user may have planted or read it.
+
+        // Readable by others: another user may have planted or read it
         let open = dir.join("open.token");
         std::fs::write(&open, "planted-token-0123456789").unwrap();
         std::fs::set_permissions(&open, std::fs::Permissions::from_mode(0o644)).unwrap();
+
         assert!(read_token_file(&open).is_err());
-        // A symlink, even to an owner-only file: a client must not send that file as its token.
+
+        // A symlink, even to an owner-only file: a client must not send that file as its token
         let secret = dir.join("secret");
         write_token_file(&secret, "private-0123456789abcdef").unwrap();
         let link = dir.join("link.token");
         std::os::unix::fs::symlink(&secret, &link).unwrap();
+
         assert!(read_token_file(&link).is_err());
-        // A FIFO is refused without blocking on open or read.
+
+        // A FIFO is refused without blocking on open or read
         let fifo = dir.join("fifo.token");
         if std::process::Command::new("mkfifo").arg(&fifo).status().is_ok_and(|s| s.success()) {
             assert!(read_token_file(&fifo).is_err());
         }
-        // A directory is not a token.
+
+        // A directory is not a token
         assert!(read_token_file(&dir).is_err());
+
         let _ = std::fs::remove_dir_all(dir);
     }
 

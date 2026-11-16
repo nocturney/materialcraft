@@ -18,10 +18,12 @@ pub(super) fn read(element: XmlNode<'_, '_>) -> Result<FunctionGraph, String> {
         if graph.nodes.len() >= 4096 {
             return Err("function exceeds the 4096-node limit".into());
         }
+
         let id = child_value(element, "uid").and_then(|value| value.parse().ok()).ok_or("function node has no valid uid")?;
         if !ids.insert(id) {
             return Err(format!("duplicate function uid {id}"));
         }
+
         let op = child_value(element, "function").ok_or("function node has no operation")?;
         let value = child_element(element, "funcDatas")
             .into_iter()
@@ -46,6 +48,7 @@ pub(super) fn read(element: XmlNode<'_, '_>) -> Result<FunctionGraph, String> {
                 if names.len() >= 4096 {
                     return Err("Function instance exceeds the 4096-input limit".into());
                 }
+
                 if let Some(instance) = &mut instance {
                     instance.inputs.push(materialcraft_core::GraphPort { identifier: port.into(), type_code: 0 });
                 } else {
@@ -62,6 +65,7 @@ pub(super) fn read(element: XmlNode<'_, '_>) -> Result<FunctionGraph, String> {
                 return Err(format!("{op}: duplicate input `{port}`"));
             }
         }
+
         let position = child_element(element, "GUILayout").and_then(|layout| child_value(layout, "gpos")).map(parse_floats).unwrap_or_default();
         graph.nodes.push(FunctionNode {
             missing: missing.then_some(names),
@@ -84,13 +88,16 @@ pub(super) fn read(element: XmlNode<'_, '_>) -> Result<FunctionGraph, String> {
     if graph.output.is_some_and(|id| !ids.contains(&id)) {
         return Err("function result references a missing node".into());
     }
+
     if graph.nodes.iter().flat_map(|node| node.inputs.iter().flatten()).any(|id| !ids.contains(id)) {
         return Err("function connection references a missing node".into());
     }
+
     // Earlier files may designate a Dot; keep the graph editable without promoting another node
     if graph.output.and_then(|id| graph.node(id)).is_some_and(|node| node.missing.is_none() && !function::can_be_output(&node.op)) {
         graph.output = None;
     }
+
     Ok(graph)
 }
 
@@ -98,9 +105,6 @@ fn native_default(op: &str) -> Option<Value> {
     Some(match op {
         "const_float1" => Value::Float(0.0),
         "const_float4" => Value::Float4([0.0; 4]),
-        "swizzle2" | "iswizzle2" => Value::Int2([0; 2]),
-        "swizzle3" | "iswizzle3" => Value::Int3([0; 3]),
-        "swizzle4" | "iswizzle4" => Value::Int4([0; 4]),
         _ => return function::default_value(op),
     })
 }
@@ -109,6 +113,7 @@ pub(super) fn write(graph: &FunctionGraph, writer: &mut SbsWriter) -> Result<Str
     if graph.nodes.len() > 4096 {
         return Err("function exceeds the 4096-node limit".into());
     }
+
     let types = function::node_types(graph)?;
     let identifiers: BTreeMap<_, _> = graph.nodes.iter().map(|node| (node.id, writer.next_uid())).collect();
     let mut output = String::from("<dynamicValue>");

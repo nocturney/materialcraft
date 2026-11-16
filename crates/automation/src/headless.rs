@@ -1,5 +1,7 @@
 //! The headless backend: a [`Session`] plus file I/O and windowless renders. Synchronous and UI-free; the MCP server, the RPC server and the CLI all drive it
 
+use std::fs::File;
+use std::io::Read;
 use std::path::Path;
 
 use materialcraft_engine::core::NodeId;
@@ -9,7 +11,7 @@ use materialcraft_render::{Lighting, Maps, Relief, Scene, Settings, VIEW_TRIANGL
 use serde_json::{Value, json};
 
 use crate::budgets::{HQ_TRIANGLES, MAX_LOCAL_RENDER_SIDE, MAX_PNG_SIDE, check_png, encode_png};
-use crate::workspace::authorize_command;
+use crate::workspace::{MAX_READ_BYTES, authorize_command};
 use crate::{AutomationError, bad};
 pub use crate::{Filesystem, RenderOptions, Rendered};
 
@@ -26,9 +28,28 @@ pub struct Headless {
 fn read_file(fs: &Filesystem, path: &str) -> Result<Vec<u8>, AutomationError> {
     match fs {
         Filesystem::Denied => Err(bad("file access is not granted: start the server with --read-root <dir>")),
-        Filesystem::TrustedLocal => std::fs::read(path).map_err(|e| AutomationError::Io(format!("cannot read {path}: {e}"))),
+        Filesystem::TrustedLocal => read_trusted(path),
         Filesystem::Workspace(w) => w.read(path),
     }
+}
+
+/// Read a local file under the same bound as capability workspaces: trusted access widens where a
+/// path may point, not how much memory one read may take.
+fn read_trusted(path: &str) -> Result<Vec<u8>, AutomationError> {
+    let file = File::open(path).map_err(|e| AutomationError::Io(format!("cannot read {path}: {e}")))?;
+    let metadata = file.metadata().map_err(|e| AutomationError::Io(format!("cannot read {path}: {e}")))?;
+    if !metadata.is_file() {
+        return Err(bad(format!("not a regular file: `{path}`")));
+    }
+    if metadata.len() > MAX_READ_BYTES {
+        return Err(bad(format!("file too large: `{path}` is {} bytes (limit {MAX_READ_BYTES})", metadata.len())));
+    }
+    let mut bytes = Vec::new();
+    file.take(MAX_READ_BYTES + 1).read_to_end(&mut bytes).map_err(|e| AutomationError::Io(format!("cannot read {path}: {e}")))?;
+    if bytes.len() as u64 > MAX_READ_BYTES {
+        return Err(bad(format!("file too large: `{path}` exceeds the {MAX_READ_BYTES}-byte limit")));
+    }
+    Ok(bytes)
 }
 
 impl Headless {

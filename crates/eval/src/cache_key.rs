@@ -5,83 +5,92 @@ use std::collections::{BTreeMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::{Arc, Mutex};
 
-pub(crate) fn image_key(i: &Image, cache: &Mutex<Cache>) -> u64 {
-    let ptr = Arc::as_ptr(&i.data) as usize;
-    let shape = (i.w, i.h, i.kind.channels());
+const MAX_INPUT_FINGERPRINTS: usize = 128;
+
+pub(crate) fn image_key(image: &Image, cache: &Mutex<Cache>) -> u64 {
+    let buffer_id = Arc::as_ptr(&image.data) as usize;
+    let shape = (image.w, image.h, image.kind.channels());
     if let Some(key) = cache
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .input_hashes
-        .get(&ptr)
-        .and_then(|saved| saved.buffer.upgrade().filter(|data| Arc::ptr_eq(data, &i.data) && saved.shape == shape).map(|_| saved.key))
+        .get(&buffer_id)
+        .and_then(|saved| saved.buffer.upgrade().filter(|data| Arc::ptr_eq(data, &image.data) && saved.shape == shape).map(|_| saved.key))
     {
-        return key;
+        return key ^ hash_of(&image.integer_sampling);
     }
-    let mut h = DefaultHasher::new();
-    (shape, i.data.len()).hash(&mut h);
-    for value in i.data.iter() {
-        value.to_bits().hash(&mut h);
+
+    let mut hasher = DefaultHasher::new();
+    (shape, image.data.len()).hash(&mut hasher);
+    for value in image.data.iter() {
+        value.to_bits().hash(&mut hasher);
     }
-    let key = h.finish();
+
+    let key = hasher.finish();
     let mut cache = cache.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-    if cache.input_hashes.len() >= 128 {
+    if cache.input_hashes.len() >= MAX_INPUT_FINGERPRINTS {
         cache.input_hashes.retain(|_, saved| saved.buffer.strong_count() > 0);
-        if cache.input_hashes.len() >= 128 {
+        if cache.input_hashes.len() >= MAX_INPUT_FINGERPRINTS {
             cache.input_hashes.clear();
         }
     }
-    cache.input_hashes.insert(ptr, crate::input_fingerprint::InputFingerprint { buffer: Arc::downgrade(&i.data), shape, key });
-    key
+
+    cache.input_hashes.insert(buffer_id, crate::input_fingerprint::InputFingerprint { buffer: Arc::downgrade(&image.data), shape, key });
+    key ^ hash_of(&image.integer_sampling)
 }
 
-pub(crate) fn hash_of(v: &impl Hash) -> u64 {
-    let mut h = DefaultHasher::new();
-    v.hash(&mut h);
-    h.finish()
+pub(crate) fn hash_of(value: &impl Hash) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    value.hash(&mut hasher);
+    hasher.finish()
 }
 
 #[cfg(test)]
-pub(crate) fn graph_tree_hash(pkg: &Package, gi: usize) -> u64 {
-    graph_tree_hash_with_registry(pkg, pkg, gi)
+pub(crate) fn graph_tree_hash(package: &Package, graph_index: usize) -> u64 {
+    graph_tree_hash_with_registry(package, package, graph_index)
 }
 
-pub(crate) fn graph_tree_hash_with_registry(registry: &Package, pkg: &Package, gi: usize) -> u64 {
-    let mut h = DefaultHasher::new();
-    let mut pending = vec![(pkg, gi)];
+pub(crate) fn graph_tree_hash_with_registry(registry: &Package, package: &Package, graph_index: usize) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    let mut pending = vec![(package, graph_index)];
     let mut seen = HashSet::new();
-    while let Some((pkg, index)) = pending.pop() {
-        if !seen.insert((std::ptr::from_ref(pkg) as usize, index)) {
+    while let Some((package, index)) = pending.pop() {
+        if !seen.insert((std::ptr::from_ref(package) as usize, index)) {
             continue;
         }
-        let Some(graph) = pkg.graphs.get(index) else { continue };
 
-        index.hash(&mut h);
-        serde_json::to_string(graph).unwrap_or_default().hash(&mut h);
-        for (id, res) in &graph.input_images {
-            pkg.resource(res).map(|r| r.bytes.content_hash()).hash(&mut h);
-            id.hash(&mut h);
-            graph.input_images_linear.contains(id).hash(&mut h);
+        let Some(graph) = package.graphs.get(index) else { continue };
+
+        index.hash(&mut hasher);
+        serde_json::to_string(graph).unwrap_or_default().hash(&mut hasher);
+        for (id, resource_name) in &graph.input_images {
+            package.resource(resource_name).map(|resource| resource.bytes.content_hash()).hash(&mut hasher);
+            id.hash(&mut hasher);
+            graph.input_images_linear.contains(id).hash(&mut hasher);
         }
+
         for instance in graph.functions().flat_map(|function| &function.nodes).filter_map(|node| node.instance.as_ref()) {
-            let source = if instance.package.is_empty() { Some(pkg) } else { registry.dependencies.get(&instance.package).map(AsRef::as_ref) };
+            let source = if instance.package.is_empty() { Some(package) } else { registry.dependencies.get(&instance.package).map(AsRef::as_ref) };
             if let Some(source) = source
                 && let Some((index, _)) = source.graph_by_name(&instance.graph)
             {
                 pending.push((source, index));
             }
         }
-        for n in &graph.nodes {
-            if let Some(Value::Text(name)) = n.params.get("resource") {
-                pkg.resource(name).map(|r| r.bytes.content_hash()).hash(&mut h);
+
+        for node in &graph.nodes {
+            if let Some(Value::Text(name)) = node.params.get("resource") {
+                package.resource(name).map(|resource| resource.bytes.content_hash()).hash(&mut hasher);
             }
-            if n.def == "graph_instance"
-                && let Some((source, index, _)) = crate::graph_instance::resolve(registry, pkg, n)
+            if node.def == "graph_instance"
+                && let Some((source, index, _)) = crate::graph_instance::resolve(registry, package, node)
             {
                 pending.push((source, index));
             }
         }
     }
-    h.finish()
+
+    hasher.finish()
 }
 
 pub(crate) fn variable_key(node: &Node, parameters: &BTreeMap<String, Value>, variables: &BTreeMap<String, Value>) -> u64 {

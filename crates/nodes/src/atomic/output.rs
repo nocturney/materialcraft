@@ -1,6 +1,5 @@
 use super::GRAPH_ITEMS;
-use super::dot::passthrough;
-use crate::{NodeDefinition, PortKind, node};
+use crate::{CookContext, CookResult, NodeDefinition, PortKind, node};
 use materialcraft_image::{Image, Kind};
 
 pub(super) fn definition() -> NodeDefinition {
@@ -10,7 +9,12 @@ pub(super) fn definition() -> NodeDefinition {
         .any_in("input", "Input")
         .text("identifier", "Identifier", "output")
         .component_usage(0)
-        .cook(passthrough)
+        .cook(output)
+}
+
+fn output(context: &CookContext) -> CookResult {
+    // Keep saved grayscale declarations even when an unconnected output cooks as RGBA
+    Ok(vec![context.sized(0).unwrap_or_else(|| Image::filled(context.w, context.h, Kind::Color, [0.0; 4]))])
 }
 
 pub fn output_kind(def: &NodeDefinition, port: usize, inputs: &[Option<Image>]) -> Kind {

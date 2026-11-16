@@ -22,9 +22,8 @@ jobs:
     uses: storytold/craft-common-actions/.github/workflows/gate.yml@main
     with:
       # Same craft-fonts commit as release.yml.
-      craft-fonts-ref: 3d9ab3a132ed0eff457e424226a435a901da30d3
+      craft-fonts-ref: c1db6d1a8ed772191241c3d185e2104be84d8691
       os: '["ubuntu-24.04","windows-latest"]'
-      toolchain: "1.96.0"
       # xtask ci runs cargo test (including doctests), not cargo nextest.
       tools: ""
       packages: >-

@@ -1,4 +1,4 @@
-use super::node_style::{PORT_RADIUS, header_color, node_label, node_rect, port_color};
+use super::node_style::{PORT_RADIUS, header_color, node_label, node_rect, port_color, shows_preview};
 use super::{GraphCamera, GraphDrag, PortHit, WireRef};
 use super::{
     navigation::frame,
@@ -60,7 +60,9 @@ fn canvas(app: &mut MaterialCraftApp, ui: &mut Ui) {
         app.graph.selected_wires.clear();
         frame(app, rect, false);
     }
+
     let painter = ui.painter_at(rect);
+
     // Background and grid
     painter.rect_filled(rect, 0.0, Color32::from_rgb(0x2b, 0x2d, 0x31));
     let mut camera = GraphCamera { origin: rect.min, pan: Vec2::from(app.ui.graph_camera.pan), zoom: app.ui.graph_camera.zoom };
@@ -84,7 +86,7 @@ fn canvas(app: &mut MaterialCraftApp, ui: &mut Ui) {
     let mut layouts: Vec<NodeLayout> = Vec::with_capacity(graph.nodes.len());
     for node in &graph.nodes {
         let (ins, outs) = materialcraft_engine::eval::ports_with_connections(&app.session.pkg, node, index.incoming(node.id).iter().copied());
-        let mut r = node_rect(node, ins.len(), outs.len(), show_thumbnails);
+        let mut r = node_rect(node, ins.len(), outs.len(), show_thumbnails && shows_preview(&outs));
         if selection.contains(&node.id) && node_delta.length() > 0.5 {
             let position = materialcraft_engine::graph_grid::translate(node.pos, node_delta.into(), app.ui.prefs.snap_to_grid);
             r = r.translate(vec2(position[0] - node.pos[0], position[1] - node.pos[1]));
@@ -99,6 +101,7 @@ fn canvas(app: &mut MaterialCraftApp, ui: &mut Ui) {
             outs: outs.iter().enumerate().map(|(i, p)| (p.id.clone(), p.label.clone(), p.kind, port_position(i, true, outs.len()))).collect(),
         });
     }
+
     app.graph.rects =
         layouts.iter().map(|layout| (layout.id, Rect::from_min_max(camera.to_screen(layout.rect.min), camera.to_screen(layout.rect.max)))).collect();
     app.graph.ports = layouts
@@ -148,12 +151,14 @@ fn canvas(app: &mut MaterialCraftApp, ui: &mut Ui) {
         if detached.as_ref().is_some_and(|(node, p)| *node == c.to && *p == c.to_port) {
             continue;
         }
+
         let a = layout_indices.get(&c.from).and_then(|index| layouts.get(*index)).and_then(|layout| layout.outs.iter().find(|p| p.0 == c.from_port));
         let b = layout_indices.get(&c.to).and_then(|index| layouts.get(*index)).and_then(|layout| layout.ins.iter().find(|p| p.0 == c.to_port));
         if let (Some(a), Some(b)) = (a, b) {
             wires.push(((c.to, c.to_port.clone()), bezier_points(camera.to_screen(a.3), camera.to_screen(b.3))));
         }
     }
+
     // Hover: not where a node card or a port sits on top of the wire
     let over_card = |p: Pos2| app.graph.rects.iter().any(|(_, r)| r.contains(p)) || nearest_port(&app.graph.ports, p, 9.0).is_some();
     let wire_hover = match &app.graph.drag {
@@ -181,10 +186,10 @@ fn canvas(app: &mut MaterialCraftApp, ui: &mut Ui) {
 
         painter.add(egui::epaint::CubicBezierShape::from_points_stroke(*ctrl, false, Color32::TRANSPARENT, stroke));
     }
+
     app.graph.wires = wires;
 
     // Nodes
-    let font = FontId::proportional((10.5 * camera.zoom).clamp(6.0, 16.0));
     let small = FontId::proportional((9.0 * camera.zoom).clamp(5.5, 13.0));
     let mut node_responses: Vec<(NodeId, egui::Response)> = Vec::new();
     let mut dot_grabs: Vec<Rect> = Vec::new();
@@ -195,14 +200,17 @@ fn canvas(app: &mut MaterialCraftApp, ui: &mut Ui) {
         if !screen_rect.intersects(rect) {
             continue;
         }
+
         let selected = selection.contains(&node.id);
         let result = cooked.nodes.get(&node.id);
         let error = result.and_then(|r| r.error.as_ref());
+
         // A dot is tiny, so its grab area keeps a minimum on-screen size
         let grab = if node.def == "dot" { node_card::dot_grab(screen_rect) } else { screen_rect };
         if node.def == "dot" {
             dot_grabs.push(grab);
         }
+
         let resp = ui.interact(grab, ui.scope_id().with(("node", node.id.0)), Sense::click_and_drag());
         crate::widgets::name(&resp, egui::Role::Button, &node_label(node));
         if node.def == "dot" {
@@ -218,19 +226,18 @@ fn canvas(app: &mut MaterialCraftApp, ui: &mut Ui) {
             {
                 let side = body.width().min(body.height()) - 6.0 * camera.zoom;
                 let tr_ = Rect::from_center_size(body.center(), vec2(side, side));
+                node_card::paint_well(&painter, tr_.expand(camera.zoom), camera.zoom);
                 let tex = app.thumbs.node(&ctx, r0.key, 0, img);
                 painter.image(tex, tr_, Rect::from_min_max(Pos2::ZERO, pos2(1.0, 1.0)), if node.disabled { Color32::from_gray(90) } else { Color32::WHITE });
             } else if let Some(value) = result.and_then(|result| result.outputs.first()).and_then(materialcraft_engine::eval::NodeOutput::as_value) {
-                let text = match value {
-                    materialcraft_engine::core::Value::Float(value) => value.to_string(),
-                    _ => serde_json::to_value(value).ok().and_then(|value| value.get("v").map(ToString::to_string)).unwrap_or_default(),
-                };
-
-                let text = crate::widgets::elided(&painter, text, font.size, theme.text, body.width() - 8.0);
-                painter.galley(body.center() - text.size() * 0.5, text, theme.text);
+                node_card::paint_well(&painter, body.shrink(4.0 * camera.zoom), camera.zoom);
+                node_card::paint_symbol(&painter, body, camera.zoom, &super::value_text::value_text(value), theme.text_strong);
+            } else if error.is_some() {
+                node_card::paint_symbol(&painter, body, camera.zoom, icon::WARNING, theme.danger);
             } else if result.is_none() {
-                painter.text(body.center(), Align2::CENTER_CENTER, icon::HOURGLASS_MEDIUM, small.clone(), theme.text_dim);
+                node_card::paint_symbol(&painter, body, camera.zoom, icon::HOURGLASS_MEDIUM, theme.text_dim);
             }
+
             // Footer: size and format
             let footer = Rect::from_min_max(pos2(screen_rect.left(), body.bottom()), screen_rect.max);
             if let Some(img) = result.and_then(|r| r.outputs.first().and_then(materialcraft_engine::eval::NodeOutput::as_image)) {
@@ -274,6 +281,7 @@ fn canvas(app: &mut MaterialCraftApp, ui: &mut Ui) {
                 resp.clone().on_hover_text(e);
             }
         }
+
         node_responses.push((node.id, resp));
     }
 
@@ -282,13 +290,13 @@ fn canvas(app: &mut MaterialCraftApp, ui: &mut Ui) {
     let pin_hits = super::annotation_canvas::pins(app, ui, &graph.pins, &camera);
     app.graph.pins = pin_hits.clone();
 
-    // Ports (drawn last, interactable over the node cards)
-    // except on a dot's body: its port hit circles would otherwise cover it and it could never be moved
+    // A dot body stays movable when port hit circles overlap it
     let port_hover = pointer.filter(|p| !dot_grabs.iter().any(|grab| grab.contains(*p))).and_then(|p| nearest_port(&app.graph.ports, p, 9.0)).cloned();
     for h in &app.graph.ports {
         if !rect.contains(h.pos) {
             continue;
         }
+
         let hot = port_hover.as_ref().is_some_and(|x| x.node == h.node && x.port == h.port && x.output == h.output);
         let r = (PORT_RADIUS * camera.zoom).clamp(2.5, 7.0) * if hot { 1.4 } else { 1.0 };
 
@@ -312,6 +320,7 @@ fn canvas(app: &mut MaterialCraftApp, ui: &mut Ui) {
     if wire_hover.is_some() {
         ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
     }
+
     app.graph.inspected_node = super::node_selection::inspected(&app.session.selection, app.graph.inspected_node);
     super::input::handle(app, ui, &resp, rect, &camera, &node_responses, &frame_hits, &comment_hits, &pin_hits, port_hover, wire_hover);
     app.graph.inspected_node = super::node_selection::inspected(&app.session.selection, app.graph.inspected_node);
@@ -343,6 +352,7 @@ fn canvas(app: &mut MaterialCraftApp, ui: &mut Ui) {
         let text = format!("{} {} node(s) failed", icon::WARNING, failed.len());
         at.y = painter.text(at, Align2::RIGHT_BOTTOM, text, FontId::proportional(11.0), theme.danger).top() - 2.0;
     }
+
     // Placeholders for missing SBS nodes are a soft warning, not a failure
     if placeholders > 0 {
         let text = format!("{} {placeholders} missing node(s), see the Console", icon::WARNING);

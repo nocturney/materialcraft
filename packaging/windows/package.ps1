@@ -90,12 +90,26 @@ Copy-Item (Join-Path $Bin 'materialcraft.exe'), (Join-Path $Bin 'materialcraft-c
 
 & (Join-Path $PSScriptRoot 'sign.ps1') (Join-Path $Stage 'materialcraft.exe') (Join-Path $Stage 'materialcraft-cli.exe')
 
+# Stage documentation once so the MSI and portable ZIP carry the same notices and licences
+$DocumentationDirectory = Join-Path $Stage 'docs'
+New-Item -ItemType Directory -Force -Path $DocumentationDirectory | Out-Null
+foreach ($DocumentationFile in 'README.md', 'LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE', 'ATTRIBUTION.md') {
+  Copy-Item -LiteralPath (Join-Path $Root $DocumentationFile) -Destination $DocumentationDirectory
+}
+
+# Include craft-fonts notices for both the UI faces and the SBS fallback font
+if ($env:CRAFT_FONTS_DIR) {
+  foreach ($FontNotice in Get-ChildItem -Path (Join-Path $env:CRAFT_FONTS_DIR 'fonts\*\OFL.txt') -File -ErrorAction SilentlyContinue) {
+    Copy-Item -LiteralPath $FontNotice.FullName -Destination (Join-Path $DocumentationDirectory "OFL-$($FontNotice.Directory.Name).txt")
+  }
+}
+
 # ---- MSI ---------------------------------------------------------------------------------------
 $Msi = Join-Path $Dist "materialcraft-$Version-windows-$Arch.msi"
 Invoke-Native 'wix build' {
   wix build (Join-Path $PSScriptRoot 'materialcraft.wxs') -arch $Arch `
     -d "Version=$MsiVersion" -d "BinDir=$Stage" -d "IconPath=$(Join-Path $Root 'assets\app-icon\materialcraft.ico')" `
-    -o $Msi
+    -d "DocsDir=$DocumentationDirectory" -o $Msi
 }
 Invoke-Native 'MSI shortcut icon validation (ICE50)' {
   wix msi validate $Msi -ice ICE50 -intermediateFolder (Join-Path $Stage 'msi-validation')
@@ -109,17 +123,7 @@ $Portable = Join-Path $TargetDir "windows-package\materialcraft-$Version-windows
 Remove-Item -Recurse -Force $Portable -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $Portable | Out-Null
 Copy-Item (Join-Path $Stage '*.exe') $Portable
-foreach ($f in 'README.md', 'LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE', 'ATTRIBUTION.md') {
-  $p = Join-Path $Root $f
-  if (Test-Path $p) { Copy-Item $p $Portable }
-}
-# Licences of the craft-fonts faces crates/ui-egui/build.rs embeds (release builds set CRAFT_FONTS_DIR).
-if ($env:CRAFT_FONTS_DIR) {
-  foreach ($f in 'biz-ud-pgothic', 'noto-sans-cjk-sc') {
-    $p = Join-Path $env:CRAFT_FONTS_DIR "fonts\$f\OFL.txt"
-    if (Test-Path $p) { Copy-Item $p (Join-Path $Portable "OFL-$f.txt") }
-  }
-}
+Copy-Item -Recurse (Join-Path $DocumentationDirectory '*') $Portable
 $Zip = Join-Path $Dist "materialcraft-$Version-windows-$Arch-portable.zip"
 Remove-Item -Force $Zip -ErrorAction SilentlyContinue
 Compress-Archive -Path $Portable -DestinationPath $Zip

@@ -16,13 +16,16 @@ fn reaches(package: &Package, changed: &BTreeSet<String>, sources: &BTreeMap<Str
         if !visited.insert(file) {
             continue;
         }
+
         if changed.contains(file) {
             return true;
         }
+
         if let Some(source) = sources.get(file) {
             pending.extend(references(source).filter(|instance| !instance.package.is_empty()).map(|instance| instance.package.as_str()));
         }
     }
+
     false
 }
 
@@ -129,28 +132,54 @@ impl Session {
                     changed.insert(path.to_string());
                 }
             }
+
             let previous_sources = sources.clone();
+
+            // Only sources reachable from open work need interface refreshes
+            // Cloning every installed graph retains unused compiled functions
+            let mut active = open_paths.clone();
+            let mut pending: Vec<_> = self
+                .open_packages()
+                .into_iter()
+                .flat_map(|(_, package, _, _)| references(package).filter(|instance| !instance.package.is_empty()).map(|instance| instance.package.clone()))
+                .collect();
+            while let Some(path) = pending.pop() {
+                if active.insert(path.clone())
+                    && let Some(source) = previous_sources.get(&path)
+                {
+                    pending.extend(references(source).filter(|instance| !instance.package.is_empty()).map(|instance| instance.package.clone()));
+                }
+            }
+
             let mut updated = false;
             for (path, source) in &previous_sources {
+                if !active.contains(path) {
+                    continue;
+                }
+
                 let mut package = source.as_ref().clone();
                 if interfaces(&mut package, &previous_sources) {
                     sources.insert(path.clone(), Arc::new(package));
                     updated = true;
                 }
             }
+
             updated |= interfaces(&mut self.pkg, &sources);
             for document in self.documents.values_mut() {
                 updated |= interfaces(&mut document.pkg, &sources);
             }
+
             if !updated {
                 break;
             }
         }
+
         if reaches(&self.pkg, &changed, &sources) {
             self.modified = true;
             self.dirty = true;
             self.cook_epoch = self.cook_epoch.wrapping_add(1);
         }
+
         self.pkg.dependencies = sources.clone();
         for document in self.documents.values_mut() {
             if reaches(&document.pkg, &changed, &sources) {
@@ -165,6 +194,7 @@ impl Session {
                 *owned = source.clone();
             }
         }
+
         self.linked_sources = sources;
     }
 }

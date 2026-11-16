@@ -30,14 +30,19 @@ fn cooks_and_caches() {
     let cache = Mutex::new(Cache::default());
     let opts = Options::new(&no_res);
     let a = cook(&p, 0, &opts, &cache);
+
     assert!(a.nodes.values().all(|r| r.error.is_none() && !r.cached));
     assert_eq!(a.image(out, 0).map(|i| (i.w, i.h)), Some((64, 64)));
+
     // Same graph: everything from the cache
     let b = cook(&p, 0, &opts, &cache);
+
     assert!(b.nodes.values().all(|r| r.cached));
+
     // Editing the blur re-cooks the blur and the output, not the noise
     p.graphs[0].node_mut(blur).unwrap().params.insert("intensity".into(), Value::Float(5.0));
     let c = cook(&p, 0, &opts, &cache);
+
     assert!(c.nodes[&noise].cached && !c.nodes[&blur].cached && !c.nodes[&out].cached);
     assert_eq!(outputs(&p.graphs[0], &c).len(), 1);
 }
@@ -64,6 +69,47 @@ fn processor_tiling_variable_tracks_both_axes_and_invalidates_cached_values() {
         let cached = cook(&package, 0, &Options::new(&no_res), &cache);
         assert!(cached.nodes[&processor].cached);
         assert_eq!(cached.nodes[&processor].outputs[0].as_value(), Some(&Value::Int(expected)));
+    }
+}
+
+#[test]
+fn base_parameter_assignments_reach_pixel_functions_without_leaking_to_other_nodes() {
+    use materialcraft_core::{BaseParameter, FunctionGraph};
+
+    let mut initialization = FunctionGraph::default();
+    let value = initialization.add_constant(Value::Float(0.375));
+    let assignment = initialization.add("set", &[value], Some(Value::Text("prepared_value".into())));
+    let output_size = initialization.add_constant(Value::Int2([0; 2]));
+    initialization.output = Some(initialization.add("sequence", &[assignment, output_size], None));
+    let mut function = FunctionGraph::default();
+    function.output = Some(function.add("get_float1", &[], Some(Value::Text("prepared_value".into()))));
+
+    let mut graph = Graph::new("Parameter scope");
+    graph.size = [4; 2];
+    graph.format = materialcraft_core::OutputFormat::F32;
+    let initialized = graph.add_node("pixel_processor", [0.0; 2]);
+    let isolated = graph.add_node("pixel_processor", [100.0; 2]);
+    for id in [initialized, isolated] {
+        graph.node_mut(id).unwrap().params.insert("function".into(), Value::Function(Box::new(function.clone())));
+        graph.node_mut(id).unwrap().params.insert("color_mode".into(), Value::Bool(false));
+    }
+    graph.node_mut(initialized).unwrap().base.functions.insert(BaseParameter::OutputSize, initialization);
+    let mut package = Package::new("Parameter scope");
+    package.graphs.push(graph);
+    let cache = Mutex::new(Cache::default());
+    for expected in [0.375, 0.625] {
+        package.graphs[0].node_mut(initialized).unwrap().base.functions.get_mut(&BaseParameter::OutputSize).unwrap().nodes[0].value =
+            Some(Value::Float(expected));
+
+        let cooked = cook(&package, 0, &Options::new(&no_res), &cache);
+
+        assert_eq!(cooked.nodes[&initialized].error, None);
+        assert!(!cooked.nodes[&initialized].cached);
+        assert!((cooked.image(initialized, 0).unwrap().mean()[0] - expected).abs() < 1e-6);
+
+        // Unassigned user variables start at typed zero in each node's own scope
+        assert_eq!(cooked.nodes[&isolated].error, None);
+        assert_eq!(cooked.image(isolated, 0).unwrap().mean()[0], 0.0);
     }
 }
 
@@ -95,6 +141,7 @@ fn preview_cap_and_unknown_nodes() {
 #[test]
 fn graph_instances_cook_their_subgraph() {
     let (mut p, ..) = sample();
+
     // A second graph: input → invert → output, instanced from the first
     let mut sub = Graph::new("inv");
     sub.size = [6, 6];
@@ -113,12 +160,14 @@ fn graph_instances_cook_their_subgraph() {
     let inst = g.add_node("graph_instance", [100.0, 100.0]);
     g.node_mut(inst).unwrap().params.insert("graph".into(), Value::Text("inv".into()));
     g.connect(u, "output", inst, "input").unwrap();
+
     // A graph instancing itself is refused, not a stack overflow
     let selfi = g.add_node("graph_instance", [0.0, 200.0]);
     g.node_mut(selfi).unwrap().params.insert("graph".into(), Value::Text("g".into()));
     let cache = Mutex::new(Cache::default());
     let c = cook(&p, 0, &Options::new(&no_res), &cache);
     let img = c.image(inst, 0).unwrap();
+
     assert!((img.data[0] - (1.0 - 0.0722 * 0.25 - 0.2126 * 0.25 - 0.7152 * 0.25)).abs() < 1e-4, "{}", img.data[0]);
     assert!(c.nodes[&selfi].error.as_deref().is_some_and(|e| e.contains("uses itself")), "{:?}", c.nodes[&selfi].error);
 }
@@ -166,6 +215,7 @@ fn deep_shared_instance_walks_stay_bounded() {
             let mut pkg = Package::new("deep");
             for index in 0..2000 {
                 let mut graph = Graph::new(&format!("g{index}"));
+
                 // Repeated references must visit the next graph only once
                 for _ in 0..4 {
                     let id = graph.add_node("graph_instance", [0.0; 2]);
@@ -173,13 +223,18 @@ fn deep_shared_instance_walks_stay_bounded() {
                 }
                 pkg.graphs.push(graph);
             }
+
             assert!(instances_reach(&pkg, 0, 1999));
             assert!(!instances_reach(&pkg, 0, 2000));
+
             let before = graph_tree_hash(&pkg, 0);
             pkg.graphs[1999].seed = 42;
+
             assert_ne!(before, graph_tree_hash(&pkg, 0));
+
             // A back edge must terminate both traversals too
             pkg.graphs[1999].nodes[0].params.insert("graph".into(), Value::Text("g0".into()));
+
             assert!(instances_reach(&pkg, 1, 0));
             assert!(!instances_reach(&pkg, 0, 2000));
             assert_ne!(before, graph_tree_hash(&pkg, 0));
@@ -211,6 +266,7 @@ fn same_size_resources_key_differently() {
     let mut p = Package::new("p");
     p.graphs.push(g);
     p.resources.push(Resource::new("tex", "tex.bin", ResourceBytes::new(vec![1; 100])));
+
     // Stands in for decoding: the first byte picks the shade
     let shade = AtomicU8::new(1);
     let res = |_: &str| Some(Image::filled(4, 4, Kind::Gray, [f32::from(shade.load(Ordering::Relaxed)) / 10.0; 4]));
@@ -221,6 +277,7 @@ fn same_size_resources_key_differently() {
     p.resources[0].bytes = ResourceBytes::new(vec![2; 100]);
     shade.store(2, Ordering::Relaxed);
     let second = cook(&p, 0, &opts, &cache);
+
     assert!(!second.nodes[&bm].cached);
     assert!((second.image(bm, 0).unwrap().mean()[0] - mean).abs() > 0.05);
 }
@@ -240,11 +297,14 @@ fn input_nodes_read_bound_preview_images() {
     let cache = Mutex::new(Cache::default());
     let c = cook(&p, 0, &Options::new(&res), &cache);
     let img = c.image(o, 0).unwrap();
+
     assert!(img.is_gray() && (img.data[0] - 0.8).abs() < 1e-4, "bound image, as gray");
+
     // The caller's image wins over the bound one
     let mut opts = Options::new(&res);
     opts.inputs.insert("curvature".into(), Image::filled(4, 4, Kind::Gray, [0.1; 4]));
     let c = cook(&p, 0, &opts, &cache);
+
     assert!((c.image(o, 0).unwrap().data[0] - 0.1).abs() < 1e-4);
 }
 
@@ -380,14 +440,16 @@ fn changed_unsampled_input_recooks() {
 }
 #[test]
 fn linear_input_images_and_bitmap_nodes_request_data_reads() {
-    // The decoder returns 0.5 for a linear request and 0.2 for an sRGB one.
+    // The decoder returns 0.5 for a linear request and 0.2 for an sRGB one
     let res = |k: &str| {
         let (name, linear) = materialcraft_image::split_resource_key(k);
         (name == "m").then(|| Image::filled(4, 4, Kind::Color, [if linear { 0.5 } else { 0.2 }; 4]))
     };
+
     let mut p = Package::new("p");
     let mut g = Graph::new("g");
     g.size = [4, 4];
+    g.format = materialcraft_core::OutputFormat::F32;
     let i = g.add_node("input_color", [0.0, 0.0]);
     g.node_mut(i).unwrap().params.insert("identifier".into(), Value::Text("n".into()));
     let b = g.add_node("bitmap", [0.0, 100.0]);
@@ -399,9 +461,12 @@ fn linear_input_images_and_bitmap_nodes_request_data_reads() {
         let c = cook(p, 0, &Options::new(&res), &cache);
         (c.image(i, 0).unwrap().data[0], c.image(b, 0).unwrap().data[0])
     };
+
     assert_eq!(first(&p), (0.2, 0.2), "default is sRGB, as before");
+
     p.graphs[0].input_images_linear.insert("n".into());
     p.graphs[0].node_mut(b).unwrap().params.insert("colour_space".into(), Value::Enum(1));
+
     assert_eq!(first(&p), (0.5, 0.5));
 }
 
@@ -420,19 +485,25 @@ fn bound_input_image_resource_change_recooks_instance() {
     let mut p = Package::new("p");
     p.graphs = vec![top, sub];
     p.resources.push(Resource::new("curv", "curv.bin", ResourceBytes::new(vec![1; 100])));
-    // Stands in for decoding: the first byte picks the shade.
+
+    // Stands in for decoding: the first byte picks the shade
     let shade = AtomicU8::new(1);
     let res = |_: &str| Some(Image::filled(4, 4, Kind::Gray, [f32::from(shade.load(Ordering::Relaxed)) / 10.0; 4]));
     let cache = Mutex::new(Cache::default());
     let opts = Options::new(&res);
     let first = cook(&p, 0, &opts, &cache);
+
     assert!(first.nodes[&inst].error.is_none(), "{:?}", first.nodes[&inst].error);
     assert!(!first.nodes[&inst].cached);
+
     let unchanged = cook(&p, 0, &opts, &cache);
+
     assert!(unchanged.nodes[&inst].cached, "an unchanged instance should be served from the cache");
+
     p.resources[0].bytes = ResourceBytes::new(vec![2; 100]);
     shade.store(2, Ordering::Relaxed);
     let second = cook(&p, 0, &opts, &cache);
+
     assert!(!second.nodes[&inst].cached, "changing the bound input image resource must recook the instance");
 }
 
@@ -508,7 +579,7 @@ fn cooked_parameters_retain_values_without_processor_graph_copies() {
 }
 
 #[test]
-fn enabled_generators_use_parent_size_and_inherit_other_input_base_parameters() {
+fn enabled_generators_use_parent_size_and_seed_with_input_image_properties() {
     use materialcraft_core::{BaseParameter, FunctionGraph, OutputFormat, ParameterInheritance, SizeMode, ValueType};
 
     for definition in ["svg", "fx_map"] {
@@ -550,11 +621,12 @@ fn enabled_generators_use_parent_size_and_inherit_other_input_base_parameters() 
             assert_eq!(result.error, None, "{definition}");
             assert_eq!(result.base.size, [64, 32], "{definition}, dynamic: {dynamic}");
             assert_eq!(cooked.image(generator, 0).map(|image| (image.w, image.h)), Some((16, 8)));
-            assert_eq!(result.base.seed, 17);
+            assert_eq!(result.base.seed, 0);
             assert_eq!(result.base.format, OutputFormat::F32);
             assert_eq!(result.base.tiling, [false, true]);
             assert_eq!(result.base.pixel_ratio, 1);
             assert_eq!(result.base.pixel_size, [0.25, 0.5]);
+
             if !dynamic {
                 assert_eq!(
                     node_size(&package.graphs[0], materialcraft_nodes::find(definition), package.graphs[0].node(generator).unwrap(), Some((32, 64)), Some(16)),
@@ -569,5 +641,53 @@ fn enabled_generators_use_parent_size_and_inherit_other_input_base_parameters() 
             assert_eq!(cooked.nodes[&generator].base.size, cooked.nodes[&background].base.size);
             assert_eq!(cooked.image(generator, 0).map(|image| (image.w, image.h)), Some((8, 16)));
         }
+    }
+}
+
+#[test]
+fn variables_set_by_a_base_parameter_function_reach_the_nodes_other_functions() {
+    use materialcraft_core::{BaseParameter, FunctionGraph};
+
+    let mut size = FunctionGraph::default();
+    let grid = size.add_constant(Value::Int(2));
+    let store = size.add("set", &[grid], Some(Value::Text("grid".into())));
+    let unchanged = size.add_constant(Value::Int2([0, 0]));
+    size.output = Some(size.add("sequence", &[store, unchanged], None));
+
+    let mut roughness = FunctionGraph::default();
+    let read = roughness.add("get_integer1", &[], Some(Value::Text("grid".into())));
+    roughness.output = Some(roughness.add("tofloat", &[read], None));
+
+    let mut graph = Graph::new("Shared variables");
+    let generator = graph.add_node("fx_map", [0.0; 2]);
+    let node = graph.node_mut(generator).unwrap();
+    node.base.functions.insert(BaseParameter::OutputSize, size);
+    node.functions.insert("roughness".into(), roughness);
+    let mut package = Package::new("Shared variables");
+    package.graphs.push(graph);
+
+    let cooked = cook(&package, 0, &Options::new(&no_res), &Mutex::new(Cache::default()));
+    let result = &cooked.nodes[&generator];
+
+    assert_eq!(result.error, None);
+    assert_eq!(result.parameters.get("roughness"), Some(&Value::Float(2.0)));
+}
+
+#[test]
+fn a_color_parameter_function_may_return_a_gray_level_or_an_rgb_triple() {
+    use materialcraft_core::FunctionGraph;
+
+    for (value, expected) in [(Value::Float(0.25), [0.25, 0.25, 0.25, 1.0]), (Value::Float3([0.1, 0.2, 0.3]), [0.1, 0.2, 0.3, 1.0])] {
+        let mut graph = Graph::new("Color function");
+        let uniform = graph.add_node("uniform", [0.0; 2]);
+        graph.node_mut(uniform).unwrap().functions.insert("color".into(), FunctionGraph::constant(value));
+        let mut package = Package::new("Color function");
+        package.graphs.push(graph);
+
+        let cooked = cook(&package, 0, &Options::new(&no_res), &Mutex::new(Cache::default()));
+        let result = &cooked.nodes[&uniform];
+
+        assert_eq!(result.error, None);
+        assert_eq!(result.parameters.get("color").and_then(Value::as_vec4), Some(expected));
     }
 }

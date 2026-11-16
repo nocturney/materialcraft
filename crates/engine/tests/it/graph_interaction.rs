@@ -134,6 +134,7 @@ fn fx_map_starts_with_a_quadrant_and_grows_image_inputs_as_connected() {
     execute(&mut session, "graph.node.param", &json!({"id": source.0, "param": "color_mode", "value": false})).unwrap();
     let owner = add(&mut session, "fx_map");
     let Value::PatternGraph(pattern) = &session.graph().unwrap().node(owner).unwrap().params["pattern"] else { panic!("missing default pattern") };
+
     assert_eq!(pattern.nodes.len(), 1);
     assert_eq!(pattern.nodes[0].kind, PatternNodeKind::Quadrant);
     assert_eq!(pattern.nodes[0].position, [0.0, 0.0]);
@@ -141,17 +142,22 @@ fn fx_map_starts_with_a_quadrant_and_grows_image_inputs_as_connected() {
     assert_eq!(session.input_ports(owner), vec!["background", "pattern0"]);
 
     let fresh = read_sbs(&write_sbs(&session.pkg).unwrap(), "fresh_pattern.sbs", &|_| None).unwrap();
+
     assert!(fresh.warnings.is_empty(), "{:?}", fresh.warnings);
+
     let loaded_pattern = fresh.pkg.graphs[0].nodes.iter().find(|node| node.def == "fx_map").unwrap();
     let Value::PatternGraph(loaded_pattern) = &loaded_pattern.params["pattern"] else { panic!("missing saved root") };
+
     assert_eq!(loaded_pattern.nodes.len(), 1);
     assert_eq!(loaded_pattern.nodes[0].kind, PatternNodeKind::Quadrant);
     assert_eq!(loaded_pattern.root, Some(loaded_pattern.nodes[0].id));
 
     for index in 0..6 {
         execute(&mut session, "graph.connect", &json!({"from": source.0, "to": owner.0, "toPort": format!("pattern{index}")})).unwrap();
+
         assert_eq!(session.input_ports(owner).last(), Some(&format!("pattern{}", index + 1)));
     }
+
     let Value::PatternGraph(pattern) = &session.graph().unwrap().node(owner).unwrap().params["pattern"] else { panic!("missing pattern") };
 
     let mut pattern = (**pattern).clone();
@@ -159,25 +165,36 @@ fn fx_map_starts_with_a_quadrant_and_grows_image_inputs_as_connected() {
     pattern.nodes[0].parameters.insert("imageindex".into(), Value::Int(6));
     execute(&mut session, "graph.pattern.set", &json!({"id": owner.0, "pattern": pattern})).unwrap();
     session.cook();
+
     assert!(session.cooked.nodes[&owner].error.is_none(), "{:?}", session.cooked.nodes[&owner].error);
     assert!((session.cooked.image(owner, 0).unwrap().mean()[0] - 0.5).abs() < 1e-5);
 
     let bytes = write_sbs(&session.pkg).unwrap();
-    assert!(std::str::from_utf8(&bytes).unwrap().contains("<identifier v=\"input:5\"/>"));
+
+    assert!(std::str::from_utf8(&bytes).unwrap().contains("<identifier v=\"inputpattern:5\"/>"));
+
     let read = read_sbs(&bytes, "image_inputs.sbs", &|_| None).unwrap();
+
     assert!(read.warnings.is_empty(), "{:?}", read.warnings);
+
     let mut loaded = Session::new(read.pkg);
     loaded.preview_size = Some(16);
     let loaded_owner = loaded.graph().unwrap().nodes.iter().find(|node| node.def == "fx_map").unwrap().id;
+
     assert_eq!(loaded.input_ports(loaded_owner), session.input_ports(owner));
+
     loaded.cook();
+
     assert!((loaded.cooked.image(loaded_owner, 0).unwrap().mean()[0] - 0.5).abs() < 1e-5);
 
     execute(&mut session, "graph.disconnect", &json!({"to": owner.0, "toPort": "pattern5"})).unwrap();
+
     assert_eq!(session.input_ports(owner).last().map(String::as_str), Some("pattern5"));
     assert!(session.undo().is_some());
     assert_eq!(session.input_ports(owner).last().map(String::as_str), Some("pattern6"));
+
     let before = session.pkg.clone();
+
     assert!(execute(&mut session, "graph.connect", &json!({"from": source.0, "to": owner.0, "toPort": "pattern999999999"})).is_err());
     assert_eq!(session.pkg, before);
 }
@@ -214,11 +231,13 @@ fn processors_sample_dynamic_image_inputs_after_sbs_round_trip() {
 
     for definition in ["pixel_processor", "value_processor"] {
         let mut session = new_session();
+        session.graph_mut().unwrap().format = materialcraft_engine::core::OutputFormat::F32;
         session.preview_size = Some(16);
         let source = add(&mut session, "uniform");
         let processor = add(&mut session, definition);
         for index in 0..6 {
             execute(&mut session, "graph.connect", &json!({"from": source.0, "to": processor.0, "toPort": format!("input{index}")})).unwrap();
+
             assert_eq!(session.input_ports(processor).last(), Some(&format!("input{}", index + 1)));
         }
 
@@ -227,15 +246,21 @@ fn processors_sample_dynamic_image_inputs_after_sbs_round_trip() {
         function.output = Some(function.add("samplelum", &[position], Some(Value::Int2([5, 1]))));
         execute(&mut session, "graph.node.param", &json!({"id": processor.0, "param": "function", "value": Value::Function(Box::new(function))})).unwrap();
         let bytes = write_sbs(&session.pkg).unwrap();
+
         assert!(std::str::from_utf8(&bytes).unwrap().contains("<identifier v=\"input:5\"/>"));
+
         let read = read_sbs(&bytes, "processor_images.sbs", &|_| None).unwrap();
+
         assert!(read.warnings.is_empty(), "{:?}", read.warnings);
+
         let mut loaded = Session::new(read.pkg);
         loaded.preview_size = Some(16);
         loaded.cook();
         let processor = loaded.graph().unwrap().nodes.iter().find(|node| node.def == definition).unwrap().id;
+
         assert_eq!(loaded.input_ports(processor).last().map(String::as_str), Some("input6"));
         assert!(loaded.cooked.nodes[&processor].error.is_none(), "{:?}", loaded.cooked.nodes[&processor].error);
+
         if definition == "value_processor" {
             assert_eq!(loaded.cooked.value(processor, 0), Some(&Value::Float(0.5)));
         } else {

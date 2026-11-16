@@ -142,7 +142,7 @@ pub fn is_mcraft(path: &str) -> bool {
 }
 
 pub fn open_bytes(session: &mut Session, bytes: &[u8], name: Option<String>) -> Result<()> {
-    open_bytes_linked(session, bytes, name, &|_| None)
+    open_bytes_linked(session, bytes, name, &|reference| materialcraft_formats::sbs::library::read(reference).ok())
 }
 
 pub fn open_bytes_linked(session: &mut Session, bytes: &[u8], name: Option<String>, linked: &dyn Fn(&str) -> Option<Vec<u8>>) -> Result<()> {
@@ -185,6 +185,7 @@ pub(crate) fn read_package_bytes(bytes: &[u8], name: &str, linked: &dyn Fn(&str)
     if !name.is_empty() {
         crate::linked_files::normalize_references(&mut read.pkg, name);
     }
+
     Ok(read)
 }
 
@@ -225,6 +226,11 @@ pub fn save_files_at(session: &Session, path: &str) -> Result<materialcraft_form
     let archive = is_mcraft(path);
     let package = if archive { session.pkg.clone() } else { package_for_save(session, Some(path)) };
     let filename = std::path::Path::new(path).file_name().and_then(|name| name.to_str()).unwrap_or("package.sbs");
+    #[cfg(not(target_arch = "wasm32"))]
+    if !archive && materialcraft_formats::sbs::library::contains_file(std::path::Path::new(path)) {
+        return Ok(materialcraft_formats::project::ProjectFiles::build_linked(&package, filename)?);
+    }
+
     Ok(materialcraft_formats::project::ProjectFiles::build(&package, filename, archive)?)
 }
 
@@ -336,6 +342,7 @@ pub fn export_outputs(s: &Session, request: &ExportRequest) -> Result<Vec<Export
         let reason = if request.outputs.is_some() { "the selected outputs are not connected" } else { "the graph has no connected output nodes" };
         return Err(bad("file.export", reason));
     }
+
     Ok(files)
 }
 
@@ -389,6 +396,7 @@ pub fn add_resource_into(s: &mut Session, file: &str, bytes: Vec<u8>, name: Opti
         if let Some(resource) = s.pkg.resources.iter_mut().find(|resource| resource.name == name) {
             resource.folder = folder.into();
         }
+
         Ok(name)
     })
 }

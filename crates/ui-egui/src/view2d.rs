@@ -24,11 +24,12 @@ const BINS: usize = 64;
 /// Histograms of the displayed 8-bit values: one for gray or isolated channels, else R, G and B.
 fn histogram(px: &[u8], channels: usize) -> Vec<[u32; BINS]> {
     let mut h = vec![[0u32; BINS]; channels];
-    for p in px.chunks_exact(4) {
+    for p in px.as_chunks::<4>().0 {
         for (c, bins) in h.iter_mut().enumerate() {
             bins[p[c] as usize * BINS / 256] += 1;
         }
     }
+
     h
 }
 
@@ -55,7 +56,8 @@ fn rgba8(img: &Image, channel: &str) -> Vec<u8> {
 pub fn show(app: &mut MaterialCraftApp, ui: &mut Ui) {
     let tk = Tokens::get(ui.ctx());
     let ctx = ui.ctx().clone();
-    // Toolbar.
+
+    // Toolbar
     egui::Frame::NONE.fill(tk.panel).inner_margin(egui::Margin::symmetric(6, 3)).show(ui, |ui| {
         ui.horizontal(|ui| {
             crate::preview_resolution::show(app, ui);
@@ -92,6 +94,7 @@ pub fn show(app: &mut MaterialCraftApp, ui: &mut Ui) {
         ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, tr("Click a node to show it here"), egui::FontId::proportional(12.0), tk.viewport_text);
         return;
     };
+
     let texture_limit = ctx.input(|i| i.max_texture_side).max(1);
     let key = app.session.cooked.nodes.get(&id).map_or(0, |r| r.key)
         ^ (texture_limit as u64).rotate_left(32)
@@ -102,7 +105,8 @@ pub fn show(app: &mut MaterialCraftApp, ui: &mut Ui) {
         ^ app.session.view2d.channel.bytes().next().unwrap_or(0) as u64;
     if app.view2d.tex.as_ref().is_none_or(|(k, _)| *k != key) {
         let px = rgba8(&img, &app.session.view2d.channel);
-        // Keep source pixels for readout/screenshots, but respect the renderer's upload limit.
+
+        // Keep source pixels for readout/screenshots, but respect the renderer's upload limit
         let ci = if img.w.max(img.h) as usize > texture_limit {
             let scale = texture_limit as f64 / f64::from(img.w.max(img.h));
             let display = img.resize((f64::from(img.w) * scale).floor().max(1.0) as u32, (f64::from(img.h) * scale).floor().max(1.0) as u32, false);
@@ -110,15 +114,18 @@ pub fn show(app: &mut MaterialCraftApp, ui: &mut Ui) {
         } else {
             ColorImage::from_rgba_unmultiplied([img.w as usize, img.h as usize], &px)
         };
+
         app.view2d.tex = Some((key, ctx.load_texture("view2d", ci, TextureOptions::NEAREST)));
         app.view2d.shown = Some((img.w, img.h, px));
     }
+
     let avail = ui.available_size();
     let (rect, resp) = ui.allocate_exact_size(vec2(avail.x, (avail.y - 20.0).max(40.0)), Sense::click_and_drag());
     crate::widgets::name(&resp, egui::Role::Image, "2D view");
     let p = ui.painter_at(rect);
     p.rect_filled(rect, 0.0, tk.viewport);
-    // Camera: fit, wheel zoom around the pointer, drag to pan.
+
+    // Camera: fit, wheel zoom around the pointer, drag to pan
     app.ui.image_camera = app.ui.image_camera.sanitized();
     let cam = &mut app.ui.image_camera;
     let tiles = if app.session.view2d.tiled { 3.0 } else { 1.0 };
@@ -127,6 +134,7 @@ pub fn show(app: &mut MaterialCraftApp, ui: &mut Ui) {
         cam.zoom = fit_zoom;
         cam.offset = [0.0, 0.0];
     }
+
     if resp.hovered() {
         let scroll = ui.input(|i| i.smooth_scroll_delta.y);
         if scroll.abs() > 0.0 {
@@ -141,15 +149,18 @@ pub fn show(app: &mut MaterialCraftApp, ui: &mut Ui) {
             }
         }
     }
+
     if resp.dragged() {
         cam.fit = false;
         let d = resp.drag_delta();
         cam.offset = [cam.offset[0] + d.x, cam.offset[1] + d.y];
     }
+
     let size = vec2(img.w as f32, img.h as f32) * cam.zoom;
     let center = rect.center() + vec2(cam.offset[0], cam.offset[1]);
     let full = Rect::from_center_size(center, size * tiles);
-    // A checker behind transparent images.
+
+    // A checker behind transparent images
     if img.kind == Kind::Color && app.session.view2d.channel == "rgba" {
         let cell = 8.0;
         let vis = full.intersect(rect);
@@ -165,6 +176,7 @@ pub fn show(app: &mut MaterialCraftApp, ui: &mut Ui) {
             row += 1;
         }
     }
+
     if let Some((_, tex)) = &app.view2d.tex {
         let uv = Rect::from_min_max(pos2(0.0, 0.0), pos2(tiles, tiles));
         let mut mesh = egui::Mesh::with_texture(tex.id());
@@ -174,11 +186,13 @@ pub fn show(app: &mut MaterialCraftApp, ui: &mut Ui) {
             p.rect_stroke(Rect::from_center_size(center, size), 0.0, egui::Stroke::new(1.0, Color32::from_white_alpha(60)), egui::StrokeKind::Outside);
         }
     }
+
     if app.session.view2d.histogram {
         let single = img.is_gray() || app.session.view2d.channel != "rgba";
         draw_histogram(&mut app.view2d, &p, rect, key, single);
     }
-    // Info line: size, format, zoom and the pixel under the pointer.
+
+    // Info line: size, format, zoom and the pixel under the pointer
     let info = Rect::from_min_size(pos2(rect.left(), rect.bottom()), vec2(rect.width(), 20.0));
     let bits = app.session.cooked.nodes.get(&id).map_or("16", |result| result.base.format.bits());
     let mut text = format!("{} x {} ({}, {}bpc)   {:.0}%", img.w, img.h, if img.is_gray() { "L" } else { "RGBA" }, bits, cam.zoom * 100.0);

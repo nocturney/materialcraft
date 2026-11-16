@@ -89,6 +89,7 @@ impl Scene {
         if mesh.normals.len() != mesh.positions.len() {
             mesh.compute_normals();
         }
+
         while mesh.triangle_count() > 0 && mesh.triangle_count() * 4 <= displacement.max_triangles {
             mesh = mesh.subdivided();
         }
@@ -108,6 +109,7 @@ impl Scene {
             *height_sum += height.sample_gray(uv.x * tiling, uv.y * tiling, true);
             *count += 1.0;
         }
+
         let offsets: Vec<Vec3> =
             spots.iter().map(|spot| spot_sums.get(spot).map_or(Vec3::ZERO, |(n, h, count)| n.normalize_or_zero() * depth * (h / count - level))).collect();
 
@@ -115,24 +117,27 @@ impl Scene {
             // Normals of the displaced surface, shared per spot so seams don't show
             let moved = |i: u32| mesh.positions.get(i as usize).zip(offsets.get(i as usize)).map(|(p, o)| *p + *o);
             let mut face_sums: HashMap<[i32; 3], Vec3> = HashMap::new();
-            for triangle in mesh.indices.chunks_exact(3) {
+            for triangle in mesh.indices.as_chunks::<3>().0 {
                 let (Some(a), Some(b), Some(c)) = (moved(triangle[0]), moved(triangle[1]), moved(triangle[2])) else { continue };
                 let face = (b - a).cross(c - a);
                 for spot in triangle.iter().filter_map(|&i| spots.get(i as usize)) {
                     *face_sums.entry(*spot).or_default() += face;
                 }
             }
+
             for (spot, n) in spots.iter().zip(mesh.normals.iter_mut()) {
                 if let Some(sum) = face_sums.get(spot).and_then(|s| s.try_normalize()) {
                     *n = sum;
                 }
             }
+
             mesh.tangents.clear();
         }
 
         for (p, offset) in mesh.positions.iter_mut().zip(&offsets) {
             *p += *offset;
         }
+
         Scene::new(mesh)
     }
 
@@ -156,9 +161,10 @@ pub const VIEW_TRIANGLES: usize = 500_000;
 pub fn builtin_mesh(id: &str) -> Mesh {
     let mut m = materialcraft_geom::primitives::builtin(id).unwrap_or_else(|| materialcraft_geom::primitives::rounded_box(Vec3::ONE, 0.15));
     if id == "sphere" {
-        // The texture wraps twice around, so texels are square at the equator.
+        // The texture wraps twice around, so texels are square at the equator
         m.uvs.iter_mut().for_each(|uv| uv.x *= 2.0);
     }
+
     m
 }
 
@@ -189,6 +195,7 @@ impl Lighting {
         if levels == 0 {
             return Vec3::ZERO;
         }
+
         let l = rough.clamp(0.0, 1.0) * (levels - 1) as f32;
         let i = (l.floor() as usize).min(levels - 1);
         let j = (i + 1).min(levels - 1);
@@ -349,6 +356,7 @@ fn direct(n: Vec3, v: Vec3, l: Vec3, base: Vec3, f0: Vec3, metal: f32, rough: f3
     if ndl <= 0.0 {
         return Vec3::ZERO;
     }
+
     let ndv = n.dot(v).max(1e-4);
     let h = (v + l).normalize_or_zero();
     let (ndh, vdh) = (n.dot(h).max(0.0), v.dot(h).max(0.0));
@@ -379,7 +387,8 @@ fn shade(scene: &Scene, maps: &Maps, light: &Lighting, s: &Settings, origin: Vec
     let w0 = 1.0 - w1 - w2;
     let lerp3 = |a: Vec3, b: Vec3, c: Vec3| a * w0 + b * w1 + c * w2;
     let nrm = lerp3(*m.normals.get(i0)?, *m.normals.get(i1)?, *m.normals.get(i2)?).normalize_or_zero();
-    // A back face (seen through a transparent front, or under an open mesh) faces the viewer.
+
+    // A back face (seen through a transparent front, or under an open mesh) faces the viewer
     let nrm = if nrm.dot(dir) > 0.0 { -nrm } else { nrm };
     let (t0, t1, t2) = (*m.tangents.get(i0)?, *m.tangents.get(i1)?, *m.tangents.get(i2)?);
     let tan = (t0.truncate() * w0 + t1.truncate() * w1 + t2.truncate() * w2).normalize_or_zero();
@@ -393,6 +402,7 @@ fn shade(scene: &Scene, maps: &Maps, light: &Lighting, s: &Settings, origin: Vec
     if s.alpha_view {
         return Some(Shaded { color: Vec3::splat(a), alpha: 1.0, t: hit.t });
     }
+
     let base = tex(&maps.base_color, uv).map_or(Vec3::splat(0.5), |c| Vec3::new(c[0], c[1], c[2]));
     let rough = tex_gray(&maps.roughness, uv, 0.5).clamp(0.02, 1.0);
     let metal = tex_gray(&maps.metallic, uv, 0.0).clamp(0.0, 1.0);
@@ -403,8 +413,8 @@ fn shade(scene: &Scene, maps: &Maps, light: &Lighting, s: &Settings, origin: Vec
             if s.normal_y_flip {
                 t.y = -t.y;
             }
-            // OpenGL convention: green points along +v in texture space, which is -bitangent
-            // with top-left UVs.
+
+            // Green points along texture +v, opposite the bitangent for top-left UVs
             (tan * t.x - bit * t.y + nrm * t.z.max(0.05)).normalize_or_zero()
         }
         None => nrm,
@@ -420,7 +430,7 @@ fn shade(scene: &Scene, maps: &Maps, light: &Lighting, s: &Settings, origin: Vec
     let diff = light.diffuse(rot(n)) * diffuse_col;
     let mut c = (diff + spec) * ao;
     if s.ao_rays > 0 || s.key_light > 0.0 {
-        // The true surface (a displaced scene's facets), offset to avoid self-hits.
+        // The true surface (a displaced scene's facets), offset to avoid self-hits
         let (p0, p1, p2) = (*m.positions.get(i0)?, *m.positions.get(i1)?, *m.positions.get(i2)?);
         let face = (p1 - p0).cross(p2 - p0).normalize_or_zero();
         let face = if face.dot(nrm) < 0.0 { -face } else { face };
@@ -435,6 +445,7 @@ fn shade(scene: &Scene, maps: &Maps, light: &Lighting, s: &Settings, origin: Vec
     if let Some(e) = tex(&maps.emissive, uv) {
         c += Vec3::new(e[0], e[1], e[2]);
     }
+
     Some(Shaded { color: c, alpha: if s.transparency { a } else { 1.0 }, t: hit.t })
 }
 
@@ -453,8 +464,10 @@ fn trace(scene: &Scene, maps: &Maps, light: &Lighting, s: &Settings, origin: Vec
         if through < 1e-3 {
             return acc;
         }
+
         o += dir * (h.t + step);
     }
+
     acc + miss * through
 }
 
@@ -489,7 +502,8 @@ pub fn render_cancellable(scene: &Scene, maps: &Maps, light: &Lighting, s: &Sett
     let ss = s.supersample.clamp(1, 4);
     let k = 2f32.powf(s.exposure);
     let bg_env = light.specular.get(3).or(light.specular.last());
-    // Key light from the camera's upper left, a little in front of the subject.
+
+    // Key light from the camera's upper left, a little in front of the subject
     let fwd = cam.ray(Vec2::ZERO, aspect).dir;
     let right = fwd.cross(Vec3::Y).normalize_or(Vec3::X);
     let key = (right * -0.6 + right.cross(fwd) * 0.75 - fwd * 0.5).normalize_or_zero();
@@ -498,6 +512,7 @@ pub fn render_cancellable(scene: &Scene, maps: &Maps, light: &Lighting, s: &Sett
         if cancel.load(Ordering::Relaxed) {
             return;
         }
+
         for x in 0..w as usize {
             let mut acc = Vec3::ZERO;
             for sy in 0..ss {
@@ -512,7 +527,7 @@ pub fn render_cancellable(scene: &Scene, maps: &Maps, light: &Lighting, s: &Sett
                         _ => bg,
                     };
                     acc += if s.alpha_view {
-                        // Display values: the alpha as is, the background tone mapped.
+                        // Display values: the alpha as is, the background tone mapped
                         match shade(scene, maps, light, s, ray.origin, ray.dir, &p) {
                             Some(h) => h.color,
                             None => miss.map(|v| linear_to_srgb(aces(v))),
@@ -522,6 +537,7 @@ pub fn render_cancellable(scene: &Scene, maps: &Maps, light: &Lighting, s: &Sett
                     };
                 }
             }
+
             let c = acc / (ss * ss) as f32;
             let q = |v: f32| {
                 let d = if s.alpha_view { v } else { linear_to_srgb(aces(v)) };
@@ -549,12 +565,16 @@ mod tests {
             height: Some(Image::gray(16, 16, |x, _| (x % 4) as f32 / 4.0)),
             ..Maps::default()
         };
+
         for id in ["rounded_cube", "sphere", "plane", "cylinder", "torus", "material_ball", "cube"] {
             let scene = Scene::builtin(id);
             let px = render(&scene, &maps, &light, &Settings::default(), 64, 48);
+
             assert_eq!(px.len(), 64 * 48 * 4);
-            // The center hits the mesh (the torus' hole is left of it): reddish.
+
+            // The center hits the mesh (the torus' hole is left of it): reddish
             let c = if id == "torus" { ((24 * 64 + 20) * 4) as usize } else { ((24 * 64 + 32) * 4) as usize };
+
             assert!(px[c] > px[c + 1], "{id}: center is not red ({:?})", &px[c..c + 3]);
         }
     }
@@ -567,18 +587,26 @@ mod tests {
         let s = Settings::default();
         let opaque = render(&scene, &red(1.0), &light, &s, 64, 48);
         let clear = render(&scene, &red(0.0), &light, &s, 64, 48);
+
         assert!(opaque[c] > opaque[c + 1] + 40, "opaque center is red: {:?}", &opaque[c..c + 3]);
-        // Fully clear: the backdrop shows through both the front and the back of the sphere.
+
+        // Fully clear: the backdrop shows through both the front and the back of the sphere
         let bg = backdrop(Vec2::new(32.5 / 64.0 * 2.0 - 1.0, 1.0 - 24.5 / 48.0 * 2.0));
         let bg = (linear_to_srgb(aces(bg.x)) * 255.0 + 0.5) as u8;
+
         assert!(clear[c..c + 3].iter().all(|v| v.abs_diff(bg) <= 1), "clear {:?} vs backdrop {bg}", &clear[c..c + 3]);
-        // Transparency off: alpha is ignored.
+
+        // Transparency off: alpha is ignored
         assert_eq!(render(&scene, &red(0.0), &light, &Settings { transparency: false, ..s }, 64, 48), opaque);
-        // An opacity output wins over the base color's alpha.
+
+        // An opacity output wins over the base color's alpha
         let half = Maps { opacity: Some(Image::filled(16, 16, Kind::Gray, [0.5; 4])), ..red(1.0) };
         let px = render(&scene, &half, &light, &Settings { alpha_view: true, ..s }, 64, 48);
+
         assert!(px[c].abs_diff(128) <= 1 && px[c] == px[c + 1], "alpha view: {:?}", &px[c..c + 3]);
+
         let px = render(&scene, &red(1.0), &light, &Settings { alpha_view: true, ..s }, 64, 48);
+
         assert_eq!(&px[c..c + 3], &[255, 255, 255]);
     }
 
@@ -669,25 +697,36 @@ mod tests {
         let scene = Scene::builtin("sphere");
         let s = Settings::default();
         let at = |s: &Settings| camera(&scene, s).project(scene.center, 1.0).unwrap();
-        // Dragging right and down by a tenth of the view moves the center right and down by
-        // the same fraction (NDC spans two view heights, y up).
+
+        // Drag fractions move the center by the same fraction in y-up NDC
         let right = Settings { target: pan(&scene, &s, 0.1, 0.0), ..s };
         let p = at(&right);
+
         assert!((p.x - 0.2).abs() < 1e-3 && p.y.abs() < 1e-3, "{p:?}");
+
         let down = Settings { target: pan(&scene, &s, 0.0, 0.1), ..s };
         let p = at(&down);
+
         assert!(p.x.abs() < 1e-3 && (p.y + 0.2).abs() < 1e-3, "{p:?}");
-        // Orbiting turns around the panned target, not the scene center.
+
+        // Orbiting turns around the panned target, not the scene center
         let turned = Settings { yaw: s.yaw + 90.0, ..right };
         let cam = camera(&scene, &turned);
+
         assert!((cam.target - camera(&scene, &right).target).length() < 1e-5);
-        // Panning back returns home; hostile inputs stay finite.
+
+        // Panning back returns home; hostile inputs stay finite
         let back = pan(&scene, &right, -0.1, 0.0);
+
         assert!(back.iter().all(|v| v.abs() < 1e-4), "{back:?}");
+
         let far = pan(&scene, &s, 1e9, f32::NAN);
+
         assert!(far.iter().all(|v| v.is_finite()), "{far:?}");
+
         for target in [[f32::NAN, 0.0, 0.0], [0.0, f32::INFINITY, 0.0], [0.0, 0.0, f32::MAX]] {
             let cam = camera(&scene, &Settings { target, ..s });
+
             assert_eq!(cam.target, scene.center, "{target:?}");
             assert!(cam.eye().is_finite());
         }

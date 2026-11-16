@@ -23,23 +23,38 @@ pub(super) fn child_value<'a>(node: XmlNode<'a, '_>, tag: &str) -> Option<&'a st
 }
 pub(super) fn xml_escape(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
-    for c in text.chars() {
-        match c {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '"' => out.push_str("&quot;"),
-            '\'' => out.push_str("&apos;"),
-            '\t' => out.push_str("&#9;"),
-            '\n' => out.push_str("&#10;"),
-            '\r' => out.push_str("&#13;"),
-            c if (c as u32) < 0x20 || c == '\u{fffe}' || c == '\u{ffff}' => {}
-            c => out.push(c),
+    // SBS historically escapes apostrophes too, although attributes are double quoted.
+    // Keep that byte-level policy while sharing XML validity/attribute escaping.
+    for (i, part) in text.split('\'').enumerate() {
+        if i != 0 {
+            out.push_str("&apos;");
         }
+        craft_xml::push_esc_attr(&mut out, part);
     }
     out
 }
 pub(super) fn is_parameters_element(xml: &str) -> bool {
     let options = roxmltree::ParsingOptions { allow_dtd: false, nodes_limit: 1_000_000 };
     xml.len() < (16 << 20) && roxmltree::Document::parse_with_options(xml, options).is_ok_and(|d| d.root_element().tag_name().name() == "parameters")
+}
+
+#[cfg(test)]
+mod shared_escape_tests {
+    use super::xml_escape;
+
+    #[test]
+    fn sbs_attribute_wire_spelling_is_preserved() {
+        assert_eq!(xml_escape("&<>\"'\t\n\r"), "&amp;&lt;&gt;&quot;&apos;&#9;&#10;&#13;");
+        assert_eq!(xml_escape("\0\u{1f}\u{fffe}\u{ffff}é😀"), "é😀");
+        assert_eq!(xml_escape("''"), "&apos;&apos;");
+        assert_eq!(xml_escape(""), "");
+    }
+
+    #[test]
+    fn written_attribute_roundtrips_valid_unicode_and_whitespace() {
+        let value = "élan 😀 ' \" & < >\t\n\r";
+        let xml = format!("<value v=\"{}\"/>", xml_escape(value));
+        let doc = roxmltree::Document::parse(&xml).unwrap();
+        assert_eq!(doc.root_element().attribute("v"), Some(value));
+    }
 }

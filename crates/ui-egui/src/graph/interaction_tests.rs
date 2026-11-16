@@ -404,11 +404,16 @@ fn function_dots_wire_move_and_save_with_regular_card_geometry() {
     let zoom = frames.app.ui.graph_camera.zoom;
     let dot_bounds = frames.app.graph.rects.iter().find(|(id, _)| id.0 == u64::from(dot)).unwrap().1;
     let card = frames.app.graph.rects.iter().find(|(id, _)| id.0 == u64::from(multiply)).unwrap().1;
+
     assert!((dot_bounds.width() / zoom - 14.0).abs() < 0.01);
     assert!((card.width() / zoom - 100.0).abs() < 0.01);
-    assert!((card.height() / zoom - 132.0).abs() < 0.01);
+
+    // An operator shows its symbol in a body that only fits its two inputs
+    assert!((card.height() / zoom - 76.0).abs() < 0.01);
     assert!(!frames.canvas_text.iter().any(|text| text.contains("Reroute")));
+
     let dot_ports: Vec<_> = frames.app.graph.ports.iter().filter(|port| port.node.0 == u64::from(dot)).collect();
+
     assert_eq!(dot_ports.len(), 2);
     assert!((dot_ports[0].pos.y - dot_ports[1].pos.y).abs() < 0.01);
     assert!(dot_ports[0].pos.x < dot_ports[1].pos.x);
@@ -419,26 +424,39 @@ fn function_dots_wire_move_and_save_with_regular_card_geometry() {
         let end = frames.app.graph.ports.iter().find(|port| port.node.0 == u64::from(to) && port.port == input).unwrap().pos;
         drag(&mut frames, start, end);
     }
+
     let graph = frames.app.session.graph().unwrap().function.as_ref().unwrap();
+
     assert_eq!(graph.node(dot).unwrap().inputs, vec![Some(source)]);
     assert_eq!(graph.node(multiply).unwrap().inputs, vec![Some(dot), Some(dot)]);
+
     let before_move = frames.app.session.pkg.clone();
     let center = frames.center(NodeId(u64::from(dot)));
     drag(&mut frames, center, center + vec2(64.0, 32.0) * zoom);
     let graph = frames.app.session.graph().unwrap().function.as_ref().unwrap();
+
     assert_eq!(graph.node(dot).unwrap().pos, [288.0, 96.0]);
     assert_eq!(graph.node(multiply).unwrap().inputs, vec![Some(dot), Some(dot)]);
 
     let bytes = write_sbs(&frames.app.session.pkg).unwrap();
+
     assert!(std::str::from_utf8(&bytes).unwrap().contains("<function v=\"passthrough\"/>"));
+
     let read = read_sbs(&bytes, "dot_sample.sbs", &|_| None).unwrap();
+
     assert!(read.warnings.is_empty(), "{:?}", read.warnings);
+
     let saved = read.pkg.graphs.iter().find(|graph| graph.name == "Dot_sample").unwrap().function.as_ref().unwrap();
     let saved_dot = saved.nodes.iter().find(|node| node.op == "passthrough").unwrap();
+
     assert_eq!(saved_dot.pos, [288.0, 96.0]);
+
     let saved_multiply = saved.nodes.iter().find(|node| node.op == "mul").unwrap();
+
     assert_eq!(saved_multiply.inputs, vec![Some(saved_dot.id), Some(saved_dot.id)]);
+
     frames.app.session.undo().unwrap();
+
     assert_eq!(frames.app.session.pkg, before_move);
 }
 
@@ -823,6 +841,7 @@ fn wires_pulled_from_an_unconnected_input_connect_on_an_output() {
     let ports = |frames: &Frames, node: NodeId, output: bool| {
         frames.app.graph.ports.iter().filter(|port| port.node == node && port.output == output).cloned().collect::<Vec<_>>()
     };
+
     let (inputs, output) = (ports(&frames, target, false), ports(&frames, source, true)[0].clone());
     let wires = |frames: &Frames| {
         frames
@@ -836,21 +855,29 @@ fn wires_pulled_from_an_unconnected_input_connect_on_an_output() {
             .collect::<Vec<_>>()
     };
     let empty = frames.app.graph.view.left_bottom() + vec2(24.0, -24.0);
+
     assert!(!frames.app.graph.rects.iter().any(|(_, rect)| rect.expand(12.0).contains(empty)), "the drop point must be empty canvas");
 
     // A click, and drops on another input and on the node's own output leave the input unconnected
     let history = frames.app.session.history();
     frames.click(inputs[0].pos, Modifiers::NONE);
     frames.time += 1.0;
+
     assert!(frames.app.graph.search.is_none(), "a click on an input opens nothing");
+
     for end in [inputs[1].pos, ports(&frames, target, true)[0].pos] {
         drag(&mut frames, inputs[0].pos, end);
     }
+
     assert!(frames.app.graph.search.is_none());
+
     // Dropped on empty canvas, it searches for a node to feed the input, as an output wire does
     drag(&mut frames, inputs[0].pos, empty);
+
     assert!(frames.app.graph.search.as_ref().is_some_and(|search| search.connect_to == Some((target, inputs[0].port.clone()))));
+
     frames.app.graph.search = None;
+
     assert!(wires(&frames).is_empty());
     assert_eq!(frames.app.session.history(), history, "a missed wire must not add an undo step");
 
@@ -859,17 +886,25 @@ fn wires_pulled_from_an_unconnected_input_connect_on_an_output() {
     frames.run(vec![Event::PointerMoved(inputs[0].pos)], Modifiers::NONE);
     frames.run(vec![Event::PointerButton { pos: inputs[0].pos, button: PointerButton::Primary, pressed: true, modifiers: Modifiers::NONE }], Modifiers::NONE);
     frames.run(vec![Event::PointerMoved(midway)], Modifiers::NONE);
+
     assert!(matches!(&frames.app.graph.drag, Some(super::GraphDrag::InputWire { to }) if *to == (target, inputs[0].port.clone())));
+
     frames.run(vec![Event::PointerMoved(output.pos)], Modifiers::NONE);
     frames.run(vec![Event::PointerButton { pos: output.pos, button: PointerButton::Primary, pressed: false, modifiers: Modifiers::NONE }], Modifiers::NONE);
+
     assert_eq!(wires(&frames), [(source, output.port.clone(), target, inputs[0].port.clone())]);
 
     // The second input too; then the connected first input is unplugged by pulling its wire, as before
     drag(&mut frames, inputs[1].pos, output.pos);
+
     assert_eq!(wires(&frames)[1], (source, output.port.clone(), target, inputs[1].port.clone()));
+
     drag(&mut frames, inputs[0].pos, empty);
+
     assert_eq!(wires(&frames), [(source, output.port.clone(), target, inputs[1].port.clone())]);
+
     frames.app.session.undo().unwrap();
+
     assert_eq!(wires(&frames).len(), 2);
 }
 

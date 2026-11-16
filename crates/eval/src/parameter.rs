@@ -6,7 +6,7 @@ pub(crate) fn resolve_parameters(
     package: &Package,
     node: &Node,
     definition: Option<&NodeDefinition>,
-    variables: &BTreeMap<String, Value>,
+    variables: &mut std::borrow::Cow<'_, BTreeMap<String, Value>>,
     seed: u32,
     size: [u32; 2],
 ) -> Result<BTreeMap<String, Value>, String> {
@@ -18,6 +18,7 @@ pub(crate) fn resolve_parameters(
             parameters
         }
     };
+
     for parameter in node.bindings.keys().chain(node.functions.keys()) {
         if !parameters.contains_key(parameter)
             && let Some(descriptor) = ParameterDescriptor::for_node(package, node, parameter)
@@ -37,8 +38,14 @@ pub(crate) fn resolve_parameters(
     for (parameter, function) in &node.functions {
         let current = parameters.get(parameter).ok_or_else(|| format!("unknown function parameter `{parameter}`"))?;
         let expected = ValueType::of(current).ok_or_else(|| format!("parameter `{parameter}` cannot have a function"))?;
-        let value =
-            crate::parameter_function::evaluate(function, expected, variables, seed, size).map_err(|error| format!("function of `{parameter}`: {error}"))?;
+        let allow_scalar = materialcraft_nodes::accepts_scalar_function(&node.def, parameter);
+        let value = crate::parameter_function::evaluate(function, expected, variables.to_mut(), seed, size, allow_scalar)
+            .map_err(|error| format!("function of `{parameter}`: {error}"))?;
+        let value = match (current, value) {
+            (Value::Float4(_), Value::Float(value)) if allow_scalar => Value::Float4([value; 4]),
+            (Value::Color(_), Value::Float(value)) if allow_scalar => Value::Float4([value, value, value, 1.0]),
+            (_, value) => value,
+        };
         let value = current.coerce_json(&serde_json::to_value(value).unwrap_or_default()).ok_or_else(|| format!("invalid function value for `{parameter}`"))?;
         parameters.insert(parameter.clone(), value);
     }

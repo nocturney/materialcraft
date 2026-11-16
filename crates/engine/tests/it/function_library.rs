@@ -7,12 +7,14 @@ use materialcraft_engine::{
 use serde_json::json;
 use std::collections::BTreeMap;
 
+use super::node_library::fixture;
+
 fn session() -> Session {
     let mut package = Package::new("Library integration");
     let mut graph = Graph::new("Caller");
     graph.function = Some(FunctionGraph::default());
     package.graphs.push(graph);
-    Session::new(package)
+    Session::with_library(package, fixture::library())
 }
 
 fn value(function: &FunctionGraph) -> Value {
@@ -48,7 +50,7 @@ fn library_instances_are_discoverable_undoable_and_portable() {
 }
 
 #[test]
-fn every_bundled_function_has_a_resolved_executable_body() {
+fn every_standard_function_has_a_resolved_executable_body() {
     let mut session = session();
     let entries = execute(&mut session, "library.functions", &json!({})).unwrap();
     let entries = entries.as_array().unwrap();
@@ -56,6 +58,7 @@ fn every_bundled_function_has_a_resolved_executable_body() {
 
     assert_eq!(entries.len(), 171);
     assert!(missing.is_empty(), "missing bundled functions: {missing:?}");
+
     for entry in entries {
         session.graph_mut().unwrap().function = Some(FunctionGraph::default());
         session.reset_history();
@@ -64,6 +67,7 @@ fn every_bundled_function_has_a_resolved_executable_body() {
         let function = session.graph().unwrap().function.as_ref().unwrap();
 
         assert!(matches!(function.nodes[0].source, Some(Ok(_))), "{}", entry["graph"]);
+
         function::compile(function, 0).unwrap_or_else(|error| panic!("{}: {error}", entry["graph"]));
     }
 }
@@ -191,6 +195,7 @@ fn supplied_functions_evaluate_before_and_after_save() {
         for node in function.nodes.iter().filter(|node| node.instance.is_some()) {
             assert!(matches!(node.source, Some(Ok(_))), "{}: unresolved instance {}", graph.sbs_path(), node.id);
         }
+
         let source = function::compile(function, 0).unwrap();
         let saved = after.pkg.graph_by_name(&graph.sbs_path()).unwrap().1;
         let saved = function::compile(saved.function.as_ref().unwrap(), 0).unwrap();
@@ -223,6 +228,7 @@ fn supplied_functions_evaluate_before_and_after_save() {
                     (parameter.id.clone(), value)
                 })
                 .collect();
+
             // This hidden helper requires a render region supplied by its caller
             if graph.name == "compute_total_number" {
                 variables.insert("render_region".into(), Value::Float4([-0.5, 0.5, -0.5, 0.5]));
@@ -233,6 +239,7 @@ fn supplied_functions_evaluate_before_and_after_save() {
                 Ok(expected) => {
                     assert_eq!(saved.evaluate(&context, &mut EvaluationState::default()).unwrap(), expected, "{}", graph.sbs_path());
                     assert_eq!(converted.evaluate(&context, &mut EvaluationState::default()).unwrap(), expected, "converted {}", graph.sbs_path());
+
                     defaults += usize::from(profile == 0);
                     errors.clear();
                     break;
@@ -240,6 +247,7 @@ fn supplied_functions_evaluate_before_and_after_save() {
                 Err(error) => errors.push(error),
             }
         }
+
         if !errors.is_empty() {
             failures.push(format!("{}: {}", graph.sbs_path(), errors.join("; ")));
         }
@@ -250,5 +258,6 @@ fn supplied_functions_evaluate_before_and_after_save() {
         before.pkg.graphs.len() - failures.len(),
         before.pkg.graphs.len()
     );
+
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
