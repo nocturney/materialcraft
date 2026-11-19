@@ -495,6 +495,17 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Channels shown", "ערוצים מוצגים"),
     ("Edit settings", "עריכת הגדרות"),
     ("Show the environment behind the mesh", "הצגת הסביבה מאחורי הרשת"),
+    ("A material export is running", "מתבצע כעת ייצוא חומר"),
+    ("Alpha", "אלפא"),
+    ("Choose a root graph", "יש לבחור גרף ראשי"),
+    ("Choose an export destination", "יש לבחור יעד לייצוא"),
+    ("Exported without shader connections", "יוצא ללא חיבורי הצללה"),
+    ("Exporting material", "מייצא חומר"),
+    ("Material exported", "החומר יוצא בהצלחה"),
+    ("Reset Selected", "איפוס הפריט שנבחר"),
+    ("Saved as the default 3D view", "נשמר כתצוגת תלת־ממד כברירת מחדל"),
+    ("The export package changed. Reopen the Export window", "חבילת הייצוא השתנתה. יש לפתוח מחדש את חלון הייצוא"),
+    ("Viewpoint", "נקודת מבט"),
 ];
 
 #[cfg(test)]
@@ -830,6 +841,46 @@ mod hebrew_new_3d_view_source_test {
             let matches: Vec<_> = TABLE.iter().filter(|(source, _)| source == key).collect();
             assert_eq!(matches.len(), 1, "Hebrew 3D-view key missing/duplicated: {key}");
             assert!(matches[0].1.chars().any(|ch| ('\u{0590}'..='\u{05ff}').contains(&ch)), "3D-view control lacks Hebrew letters: {key}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod hebrew_export_and_viewpoint_source_tests {
+    use super::TABLE;
+
+    #[test]
+    fn native_export_completion_and_viewpoint_labels_are_hebrew() {
+        let sources = [
+            include_str!("../view3d.rs"),
+            include_str!("../view3d/menus.rs"),
+            include_str!("../view3d/display_bar.rs"),
+            include_str!("../export/mod.rs"),
+        ];
+        const KEYS: &[&str] = &[
+            "A material export is running",
+            "Alpha",
+            "Choose a root graph",
+            "Choose an export destination",
+            "Exported without shader connections",
+            "Exporting material",
+            "Material exported",
+            "Reset Selected",
+            "Saved as the default 3D view",
+            "The export package changed. Reopen the Export window",
+            "Viewpoint",
+        ];
+        for key in KEYS {
+            assert!(
+                sources.iter().any(|source| source.contains(&format!("tr({key:?})"))),
+                "no live Native tr() callsite for {key}"
+            );
+            let entries: Vec<_> = TABLE.iter().filter(|(source, _)| source == key).collect();
+            assert_eq!(entries.len(), 1, "missing or duplicate Hebrew key: {key}");
+            assert!(
+                entries[0].1.chars().any(|ch| ('\u{0590}'..='\u{05ff}').contains(&ch)),
+                "translation has no Hebrew letters: {key}"
+            );
         }
     }
 }
