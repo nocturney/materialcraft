@@ -851,12 +851,8 @@ mod hebrew_export_and_viewpoint_source_tests {
 
     #[test]
     fn native_export_completion_and_viewpoint_labels_are_hebrew() {
-        let sources = [
-            include_str!("../view3d.rs"),
-            include_str!("../view3d/menus.rs"),
-            include_str!("../view3d/display_bar.rs"),
-            include_str!("../export/mod.rs"),
-        ];
+        let sources =
+            [include_str!("../view3d.rs"), include_str!("../view3d/menus.rs"), include_str!("../view3d/display_bar.rs"), include_str!("../export/mod.rs")];
         const KEYS: &[&str] = &[
             "A material export is running",
             "Alpha",
@@ -871,16 +867,10 @@ mod hebrew_export_and_viewpoint_source_tests {
             "Viewpoint",
         ];
         for key in KEYS {
-            assert!(
-                sources.iter().any(|source| source.contains(&format!("tr({key:?})"))),
-                "no live Native tr() callsite for {key}"
-            );
+            assert!(sources.iter().any(|source| source.contains(&format!("tr({key:?})"))), "no live Native tr() callsite for {key}");
             let entries: Vec<_> = TABLE.iter().filter(|(source, _)| source == key).collect();
             assert_eq!(entries.len(), 1, "missing or duplicate Hebrew key: {key}");
-            assert!(
-                entries[0].1.chars().any(|ch| ('\u{0590}'..='\u{05ff}').contains(&ch)),
-                "translation has no Hebrew letters: {key}"
-            );
+            assert!(entries[0].1.chars().any(|ch| ('\u{0590}'..='\u{05ff}').contains(&ch)), "translation has no Hebrew letters: {key}");
         }
     }
 }
