@@ -506,6 +506,31 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Saved as the default 3D view", "נשמר כתצוגת תלת־ממד כברירת מחדל"),
     ("The export package changed. Reopen the Export window", "חבילת הייצוא השתנתה. יש לפתוח מחדש את חלון הייצוא"),
     ("Viewpoint", "נקודת מבט"),
+    // Source-locked 2D image, histogram, and view controls.
+    ("Background image...", "תמונת רקע..."),
+    ("Color sampler: click the image to place it", "דוגם צבעים: לחצו על התמונה כדי למקם אותו"),
+    ("Copy image to the clipboard", "העתקת התמונה ללוח"),
+    ("Draw the UV layout of the 3D view's mesh over the image", "הצגת פריסת ה־UV של רשת התלת־ממד על התמונה"),
+    ("Grayscale", "גווני אפור"),
+    ("Image copied to the clipboard", "התמונה הועתקה ללוח"),
+    ("Image information", "מידע על התמונה"),
+    ("Information", "מידע"),
+    ("Invert zoom in views", "היפוך כיוון הזום בתצוגות"),
+    ("Keep the width and height the same", "שמירה על רוחב וגובה זהים"),
+    ("Move the pointer over the image to read its pixels", "הזיזו את המצביע מעל התמונה כדי לראות את ערכי הפיקסלים"),
+    ("Pixels", "פיקסלים"),
+    ("Plot the square root of the counts, so small counts stay visible", "הצגת השורש הריבועי של הספירות, כדי להבליט גם ערכים קטנים"),
+    ("Range", "טווח"),
+    ("Remove the background image", "הסרת תמונת הרקע"),
+    ("Remove the color sampler", "הסרת דוגם הצבעים"),
+    ("Selected max", "הערך המרבי בבחירה"),
+    ("Selected pixels", "פיקסלים שנבחרו"),
+    ("Selected range", "טווח הבחירה"),
+    ("Sqrt", "שורש ריבועי"),
+    ("The pixel under the color sampler", "הפיקסל שמתחת לדוגם הצבעים"),
+    ("The pixel under the pointer", "הפיקסל שמתחת למצביע"),
+    ("Zoom in", "הגדלה"),
+    ("Zoom out", "הקטנה"),
 ];
 
 #[cfg(test)]
@@ -871,6 +896,57 @@ mod hebrew_export_and_viewpoint_source_tests {
             let entries: Vec<_> = TABLE.iter().filter(|(source, _)| source == key).collect();
             assert_eq!(entries.len(), 1, "missing or duplicate Hebrew key: {key}");
             assert!(entries[0].1.chars().any(|ch| ('\u{0590}'..='\u{05ff}').contains(&ch)), "translation has no Hebrew letters: {key}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod hebrew_native_view2d_source_tests {
+    use super::TABLE;
+
+    #[test]
+    fn native_image_histogram_and_view_controls_have_original_hebrew_labels() {
+        let native_sources = [
+            include_str!("../view2d/viewport.rs"),
+            include_str!("../view2d/top_toolbar.rs"),
+            include_str!("../view2d/bottom_toolbar.rs"),
+            include_str!("../view2d/histogram_panel.rs"),
+            include_str!("../view2d/information_panel.rs"),
+            include_str!("../preference/general_page.rs"),
+            include_str!("../new_graph_dialog.rs"),
+        ];
+        const KEYS: &[&str] = &[
+            "Background image...",
+            "Color sampler: click the image to place it",
+            "Copy image to the clipboard",
+            "Draw the UV layout of the 3D view's mesh over the image",
+            "Grayscale",
+            "Image copied to the clipboard",
+            "Image information",
+            "Information",
+            "Invert zoom in views",
+            "Keep the width and height the same",
+            "Move the pointer over the image to read its pixels",
+            "Pixels",
+            "Plot the square root of the counts, so small counts stay visible",
+            "Range",
+            "Remove the background image",
+            "Remove the color sampler",
+            "Selected max",
+            "Selected pixels",
+            "Selected range",
+            "Sqrt",
+            "The pixel under the color sampler",
+            "The pixel under the pointer",
+            "Zoom in",
+            "Zoom out",
+        ];
+        assert_eq!(KEYS.len(), 24);
+        for key in KEYS {
+            assert!(native_sources.iter().any(|s| s.contains(&format!("tr({key:?})"))), "not an actual native translated callsite: {key}");
+            let rows: Vec<_> = TABLE.iter().filter(|(english, _)| english == key).collect();
+            assert_eq!(rows.len(), 1, "missing/duplicate native Hebrew label: {key}");
+            assert!(rows[0].1.chars().any(|c| ('\u{0590}'..='\u{05ff}').contains(&c)), "Hebrew letters missing for: {key}");
         }
     }
 }
