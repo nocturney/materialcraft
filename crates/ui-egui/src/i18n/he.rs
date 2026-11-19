@@ -451,6 +451,50 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Transforms the input with an offset and a 2 by 2 matrix.", "מבצע התמרה לקלט באמצעות היסט ומטריצה בגודל 2×2."),
     ("Maps grayscale values to colors along a gradient.", "ממפה ערכי גוני אפור לצבעים לאורך מעבר צבע."),
     ("Unsharp mask.", "מסכת חידוד."),
+    // Newly introduced 3D-view controls, verified against current Native tr() callsites.
+    ("Projection", "היטל"),
+    ("Background Type", "סוג הרקע"),
+    ("Render resolution", "רזולוציית הרינדור"),
+    ("Render resolution scale", "מקדם רזולוציית הרינדור"),
+    ("Clip planes", "מישורי חיתוך"),
+    ("Ambient Light", "תאורת סביבה"),
+    ("Environment image", "תמונת סביבה"),
+    ("Samples per pixel side", "דגימות לכל צלע של פיקסל"),
+    ("Ambient occlusion rays", "קרני הסתרה סביבתית"),
+    ("Preview resolution", "רזולוציית התצוגה המקדימה"),
+    ("Shader", "שיידר"),
+    ("Shown on the mesh", "מוצג על גבי הרשת"),
+    ("Height technique", "שיטת עיבוד הגובה"),
+    ("UVs", "קואורדינטות UV"),
+    ("UV scale U", "קנה המידה בציר U"),
+    ("UV scale V", "קנה המידה בציר V"),
+    ("Tessellation", "חלוקת המשטח"),
+    ("This shader has no parameters", "לשיידר הזה אין פרמטרים"),
+    ("Reset Common Parameters", "איפוס פרמטרים משותפים"),
+    ("Reset Material", "איפוס החומר"),
+    ("Graph output", "פלט הגרף"),
+    ("Lights", "אורות"),
+    ("CPU ray tracer", "מעקב קרניים במעבד"),
+    ("Display UVs in 2D View", "הצגת UV בתצוגת דו־ממד"),
+    ("Save Current State...", "שמירת המצב הנוכחי..."),
+    ("Save Current State As Default", "שמירת המצב הנוכחי כברירת מחדל"),
+    ("Export Tessellated Geometry...", "ייצוא גאומטריה מחולקת..."),
+    ("Copy Render to Clipboard", "העתקת תמונת הרינדור ללוח"),
+    ("Scene browser", "סייר הסצנה"),
+    ("Renderer settings", "הגדרות מנוע הרינדור"),
+    ("Displacement", "הסטת פני השטח"),
+    ("Height scale", "קנה מידה לגובה"),
+    ("Height level", "מפלס הגובה"),
+    ("Bounding box", "תיבה תוחמת"),
+    ("Frames per second", "פריימים לשנייה"),
+    ("Meshes", "רשתות"),
+    ("Triangles", "משולשים"),
+    ("Vertices", "קודקודים"),
+    ("Save Render...", "שמירת תמונת רינדור..."),
+    ("Edit properties", "עריכת מאפיינים"),
+    ("Channels shown", "ערוצים מוצגים"),
+    ("Edit settings", "עריכת הגדרות"),
+    ("Show the environment behind the mesh", "הצגת הסביבה מאחורי הרשת"),
 ];
 
 #[cfg(test)]
@@ -718,6 +762,74 @@ mod hebrew_native_node_description_tests {
             let matches: Vec<_> = TABLE.iter().filter(|(key, _)| key == english).collect();
             assert_eq!(matches.len(), 1, "Hebrew description missing or duplicated: {english}");
             assert!(matches[0].1.chars().any(|ch| ('\u{0590}'..='\u{05ff}').contains(&ch)), "Not Hebrew: {english}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod hebrew_new_3d_view_source_test {
+    use super::TABLE;
+
+    #[test]
+    fn visible_3d_controls_are_source_locked_and_translated() {
+        let native_sources: &[&str] = &[
+            include_str!("../view3d.rs"),
+            include_str!("../view3d/properties.rs"),
+            include_str!("../view3d/menus.rs"),
+            include_str!("../view3d/tool_strip.rs"),
+            include_str!("../view3d/overlays.rs"),
+            include_str!("../view3d/display_bar.rs"),
+        ];
+        const KEYS: &[&str] = &[
+            "Projection",
+            "Background Type",
+            "Render resolution",
+            "Render resolution scale",
+            "Clip planes",
+            "Ambient Light",
+            "Environment image",
+            "Samples per pixel side",
+            "Ambient occlusion rays",
+            "Preview resolution",
+            "Shader",
+            "Shown on the mesh",
+            "Height technique",
+            "UVs",
+            "UV scale U",
+            "UV scale V",
+            "Tessellation",
+            "This shader has no parameters",
+            "Reset Common Parameters",
+            "Reset Material",
+            "Graph output",
+            "Lights",
+            "CPU ray tracer",
+            "Display UVs in 2D View",
+            "Save Current State...",
+            "Save Current State As Default",
+            "Export Tessellated Geometry...",
+            "Copy Render to Clipboard",
+            "Scene browser",
+            "Renderer settings",
+            "Displacement",
+            "Height scale",
+            "Height level",
+            "Bounding box",
+            "Frames per second",
+            "Meshes",
+            "Triangles",
+            "Vertices",
+            "Save Render...",
+            "Edit properties",
+            "Channels shown",
+            "Edit settings",
+            "Show the environment behind the mesh",
+        ];
+        for key in KEYS {
+            assert!(native_sources.iter().any(|source| source.contains(&format!("tr({key:?})"))), "The Native 3D-view source no longer uses tr() for {key}");
+            let matches: Vec<_> = TABLE.iter().filter(|(source, _)| source == key).collect();
+            assert_eq!(matches.len(), 1, "Hebrew 3D-view key missing/duplicated: {key}");
+            assert!(matches[0].1.chars().any(|ch| ('\u{0590}'..='\u{05ff}').contains(&ch)), "3D-view control lacks Hebrew letters: {key}");
         }
     }
 }
