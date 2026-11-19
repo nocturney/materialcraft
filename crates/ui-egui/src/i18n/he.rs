@@ -559,6 +559,15 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Use the built-in default", "שימוש בברירת המחדל המובנית"),
     ("View outputs in 3D view when opening a graph", "הצגת הפלטים בתצוגת תלת־ממד בעת פתיחת גרף"),
     ("is already the shortcut of", "כבר משמש קיצור דרך עבור"),
+    ("A graph's name is unique in its package; a taken name gets a number", "שם הגרף חייב להיות ייחודי בחבילה; אם השם תפוס, יתווסף לו מספר"),
+    ("Choose a package", "בחירת חבילה"),
+    ("Loaded", "נטען"),
+    ("New function graph", "גרף פונקציה חדש"),
+    ("New package", "חבילה חדשה"),
+    ("No plugins are installed. MaterialCraft does not load plugins yet.", "אין תוספים מותקנים. MaterialCraft עדיין אינו טוען תוספים."),
+    ("Plugin Manager", "מנהל התוספים"),
+    ("Plugins", "תוספים"),
+    ("Plugins are not supported yet", "תוספים עדיין אינם נתמכים"),
 ];
 
 #[cfg(test)]
@@ -1022,6 +1031,34 @@ mod hebrew_native_preferences_shortcuts_source_tests {
             let rows: Vec<_> = TABLE.iter().filter(|(english, _)| english == key).collect();
             assert_eq!(rows.len(), 1, "Hebrew key missing or duplicated: {key}");
             assert!(rows[0].1.chars().any(|ch| ('\u{0590}'..='\u{05ff}').contains(&ch)), "Hebrew letters missing: {key}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod hebrew_plugin_and_new_graph_source_tests {
+    use super::TABLE;
+
+    #[test]
+    fn original_hebrew_labels_cover_live_plugins_and_new_graph_dialogs() {
+        let sources = [include_str!("../plugin_manager.rs"), include_str!("../new_graph_dialog.rs")];
+        const KEYS: &[&str] = &[
+            "A graph's name is unique in its package; a taken name gets a number",
+            "Choose a package",
+            "Loaded",
+            "New function graph",
+            "New package",
+            "No plugins are installed. MaterialCraft does not load plugins yet.",
+            "Plugin Manager",
+            "Plugins",
+            "Plugins are not supported yet",
+        ];
+        assert_eq!(KEYS.len(), 9);
+        for key in KEYS {
+            assert!(sources.iter().any(|s| s.contains(&format!("tr({key:?})"))), "missing native source callsite: {key}");
+            let rows: Vec<_> = TABLE.iter().filter(|(original, _)| original == key).collect();
+            assert_eq!(rows.len(), 1, "absent or duplicated Hebrew key: {key}");
+            assert!(rows[0].1.chars().any(|c| ('\u{0590}'..='\u{05ff}').contains(&c)), "no Hebrew characters: {key}");
         }
     }
 }
