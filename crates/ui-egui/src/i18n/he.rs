@@ -594,10 +594,16 @@ pub const TABLE: &[(&str, &str)] = &[
     ("packages saved", "חבילות נשמרו"),
     ("Use Save as for:", "יש להשתמש ב׳שמירה בשם׳ עבור:"),
     ("Not saved:", "לא נשמרו:"),
-    ("Build tileable materials from noises, patterns and filters, see them live in 2D and 3D, and export the maps for any engine.", "צרו חומרים בעלי מרקם רציף וחוזר באמצעות רעשים, דפוסים ומסננים, צפו בהם בזמן אמת בדו־ממד ובתלת־ממד וייצאו מפות לכל מנוע."),
+    (
+        "Build tileable materials from noises, patterns and filters, see them live in 2D and 3D, and export the maps for any engine.",
+        "צרו חומרים בעלי מרקם רציף וחוזר באמצעות רעשים, דפוסים ומסננים, צפו בהם בזמן אמת בדו־ממד ובתלת־ממד וייצאו מפות לכל מנוע.",
+    ),
     ("Start from a template", "התחלה מתבנית"),
     ("The log could not be saved", "לא ניתן לשמור את קובץ היומן"),
-    ("Engine suspended: choose Suspend engine in the Tools menu again (Shift+Escape) to resume", "המנוע מושהה: לחידוש הפעולה, בחרו שוב ב׳השהיית המנוע׳ בתפריט כלים (Shift+Escape)"),
+    (
+        "Engine suspended: choose Suspend engine in the Tools menu again (Shift+Escape) to resume",
+        "המנוע מושהה: לחידוש הפעולה, בחרו שוב ב׳השהיית המנוע׳ בתפריט כלים (Shift+Escape)",
+    ),
     ("Automatic", "אוטומטי"),
 ];
 
