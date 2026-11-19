@@ -531,6 +531,34 @@ pub const TABLE: &[(&str, &str)] = &[
     ("The pixel under the pointer", "הפיקסל שמתחת למצביע"),
     ("Zoom in", "הגדלה"),
     ("Zoom out", "הקטנה"),
+    // Native preferences, graph and keyboard-shortcut controls (day shift 19 Nov 2026).
+    ("A saved default is in use", "נמצאת בשימוש ברירת מחדל שמורה"),
+    ("Create nodes by dropping a wire on empty canvas", "יצירת צמתים באמצעות שחרור חיבור באזור ריק במשטח העבודה"),
+    ("Default environment", "סביבת ברירת מחדל"),
+    ("Environment shown behind the mesh by default", "הצגת הסביבה מאחורי הרשת כברירת מחדל"),
+    (
+        "For the material graph: press the keys over the graph to add the node under the pointer",
+        "בגרף החומר: לחצו על המקשים מעל הגרף כדי להוסיף צומת במיקום המצביע",
+    ),
+    ("Point Light 1", "תאורת נקודה 1"),
+    ("Point Light 2", "תאורת נקודה 2"),
+    ("Press keys, Backspace to clear, Esc to cancel", "לחצו על מקשים; Backspace לניקוי, Esc לביטול"),
+    ("Rebuild thumbnails", "בנייה מחדש של תמונות ממוזערות"),
+    ("Remove every node creation shortcut", "הסרת כל קיצורי הדרך ליצירת צמתים"),
+    ("Sample count", "מספר דגימות"),
+    (
+        "Save Current State As Default, in the 3D view's Scene menu, saves the whole view here",
+        "הפקודה 'שמירת המצב הנוכחי כברירת מחדל' בתפריט 'סצנה' של תצוגת תלת־ממד שומרת כאן את התצוגה כולה",
+    ),
+    ("Search by shortcut", "חיפוש לפי קיצור דרך"),
+    ("Show all assigned", "הצגת כל קיצורי הדרך שהוקצו"),
+    ("Show the library as a list", "הצגת הספרייה כרשימה"),
+    ("Tab key shows the node search", "המקש Tab פותח את חיפוש הצמתים"),
+    ("The built-in default is in use", "נמצאת בשימוש ברירת המחדל המובנית"),
+    ("The copies are numbered files in", "העותקים נשמרים כקבצים ממוספרים בתיקייה"),
+    ("Use the built-in default", "שימוש בברירת המחדל המובנית"),
+    ("View outputs in 3D view when opening a graph", "הצגת הפלטים בתצוגת תלת־ממד בעת פתיחת גרף"),
+    ("is already the shortcut of", "כבר משמש קיצור דרך עבור"),
 ];
 
 #[cfg(test)]
@@ -947,6 +975,53 @@ mod hebrew_native_view2d_source_tests {
             let rows: Vec<_> = TABLE.iter().filter(|(english, _)| english == key).collect();
             assert_eq!(rows.len(), 1, "missing/duplicate native Hebrew label: {key}");
             assert!(rows[0].1.chars().any(|c| ('\u{0590}'..='\u{05ff}').contains(&c)), "Hebrew letters missing for: {key}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod hebrew_native_preferences_shortcuts_source_tests {
+    use super::TABLE;
+
+    #[test]
+    fn graph_preferences_shortcuts_and_library_have_source_backed_hebrew() {
+        let sources = [
+            include_str!("../preference/projects_page.rs"),
+            include_str!("../preference/shortcuts_page.rs"),
+            include_str!("../preference/graph_page.rs"),
+            include_str!("../preference/library_page.rs"),
+            include_str!("../preference/general_page.rs"),
+            include_str!("../preference/view3d_page.rs"),
+        ];
+        const KEYS: &[&str] = &[
+            "A saved default is in use",
+            "Create nodes by dropping a wire on empty canvas",
+            "Default environment",
+            "Environment shown behind the mesh by default",
+            "For the material graph: press the keys over the graph to add the node under the pointer",
+            "Point Light 1",
+            "Point Light 2",
+            "Press keys, Backspace to clear, Esc to cancel",
+            "Rebuild thumbnails",
+            "Remove every node creation shortcut",
+            "Sample count",
+            "Save Current State As Default, in the 3D view's Scene menu, saves the whole view here",
+            "Search by shortcut",
+            "Show all assigned",
+            "Show the library as a list",
+            "Tab key shows the node search",
+            "The built-in default is in use",
+            "The copies are numbered files in",
+            "Use the built-in default",
+            "View outputs in 3D view when opening a graph",
+            "is already the shortcut of",
+        ];
+        assert_eq!(KEYS.len(), 21);
+        for key in KEYS {
+            assert!(sources.iter().any(|source| source.contains(&format!("tr({key:?})"))), "source callsite missing: {key}");
+            let rows: Vec<_> = TABLE.iter().filter(|(english, _)| english == key).collect();
+            assert_eq!(rows.len(), 1, "Hebrew key missing or duplicated: {key}");
+            assert!(rows[0].1.chars().any(|ch| ('\u{0590}'..='\u{05ff}').contains(&ch)), "Hebrew letters missing: {key}");
         }
     }
 }
