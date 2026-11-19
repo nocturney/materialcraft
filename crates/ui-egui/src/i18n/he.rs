@@ -584,6 +584,13 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Raise the mesh by the height output", "הגבהת הרשת לפי פלט הגובה"),
     ("Meters per scene unit", "מטרים ליחידת סצנה"),
     ("Selected", "נבחר"),
+    // Untranslated 2D image, output and information/histogram controls.
+    ("The background image could not be shown", "לא ניתן להציג את תמונת הרקע"),
+    ("Select output", "בחירת פלט"),
+    ("Close the Histogram panel", "סגירת חלונית ההיסטוגרמה"),
+    ("Used range", "הטווח שבשימוש"),
+    ("bits", "סיביות"),
+    ("Close the Information panel", "סגירת חלונית המידע"),
 ];
 
 #[cfg(test)]
@@ -1111,6 +1118,37 @@ mod hebrew_native_view3d_feedback_tests {
             let translated: Vec<_> = TABLE.iter().filter(|(source, _)| source == key).collect();
             assert_eq!(translated.len(), 1, "absent or duplicate Hebrew Native label: {key}");
             assert!(translated[0].1.chars().any(|c| ('\u{0590}'..='\u{05ff}').contains(&c)), "not Hebrew: {key}");
+        }
+    }
+}
+
+
+#[cfg(test)]
+mod hebrew_native_view2d_status_source_tests {
+    use super::TABLE;
+
+    #[test]
+    fn view2d_errors_output_and_panel_statistics_have_original_hebrew_labels() {
+        const SOURCES: &[&str] = &[
+            include_str!("../view2d/viewport.rs"),
+            include_str!("../view2d/top_toolbar.rs"),
+            include_str!("../view2d/histogram_panel.rs"),
+            include_str!("../view2d/information_panel.rs"),
+        ];
+        const KEYS: &[&str] = &[
+            "The background image could not be shown",
+            "Select output",
+            "Close the Histogram panel",
+            "Used range",
+            "bits",
+            "Close the Information panel",
+        ];
+        assert_eq!(KEYS.len(), 6);
+        for key in KEYS {
+            assert!(SOURCES.iter().any(|s| s.contains(&format!("tr({key:?})"))), "no source callsite for: {key}");
+            let matches: Vec<_> = TABLE.iter().filter(|(source, _)| source == key).collect();
+            assert_eq!(matches.len(), 1, "missing/duplicate Hebrew UI key: {key}");
+            assert!(matches[0].1.chars().any(|ch| ('\u{0590}'..='\u{05ff}').contains(&ch)), "no Hebrew text: {key}");
         }
     }
 }
