@@ -568,6 +568,22 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Plugin Manager", "מנהל התוספים"),
     ("Plugins", "תוספים"),
     ("Plugins are not supported yet", "תוספים עדיין אינם נתמכים"),
+    // Live 3D render/status, property and overlay labels (19 Nov 2026).
+    ("3D view state", "מצב תצוגת תלת־ממד"),
+    ("Render copied to the clipboard", "התמונה המרונדרת הועתקה ללוח"),
+    (
+        "Saving a render needs the desktop app; copy it to the clipboard instead",
+        "שמירת תמונה מרונדרת מחייבת את יישום שולחן העבודה; במקום זאת אפשר להעתיק אותה ללוח",
+    ),
+    ("The 3D view has not drawn a mesh yet", "טרם הוצגה רשת בתצוגת התלת־ממד"),
+    ("Back to the selection's properties", "חזרה למאפייני הבחירה"),
+    ("Enabled", "פעיל"),
+    ("Stored with the state; this renderer does not show it", "נשמר כחלק ממצב התצוגה; מנוע התצוגה הנוכחי אינו מציג אותו"),
+    ("Use this parameter; off reads as if the material had none", "שימוש בפרמטר זה; כשהאפשרות כבויה, החומר ייקרא כאילו הפרמטר אינו מוגדר"),
+    ("Display settings", "הגדרות תצוגה"),
+    ("Raise the mesh by the height output", "הגבהת הרשת לפי פלט הגובה"),
+    ("Meters per scene unit", "מטרים ליחידת סצנה"),
+    ("Selected", "נבחר"),
 ];
 
 #[cfg(test)]
@@ -1059,6 +1075,42 @@ mod hebrew_plugin_and_new_graph_source_tests {
             let rows: Vec<_> = TABLE.iter().filter(|(original, _)| original == key).collect();
             assert_eq!(rows.len(), 1, "absent or duplicated Hebrew key: {key}");
             assert!(rows[0].1.chars().any(|c| ('\u{0590}'..='\u{05ff}').contains(&c)), "no Hebrew characters: {key}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod hebrew_native_view3d_feedback_tests {
+    use super::TABLE;
+
+    #[test]
+    fn native_view3d_render_feedback_and_properties_have_original_hebrew_labels() {
+        const SOURCES: &[&str] = &[
+            include_str!("../view3d/output.rs"),
+            include_str!("../view3d/properties.rs"),
+            include_str!("../view3d/tool_strip.rs"),
+            include_str!("../view3d/overlays.rs"),
+        ];
+        const KEYS: &[&str] = &[
+            "3D view state",
+            "Render copied to the clipboard",
+            "Saving a render needs the desktop app; copy it to the clipboard instead",
+            "The 3D view has not drawn a mesh yet",
+            "Back to the selection's properties",
+            "Enabled",
+            "Stored with the state; this renderer does not show it",
+            "Use this parameter; off reads as if the material had none",
+            "Display settings",
+            "Raise the mesh by the height output",
+            "Meters per scene unit",
+            "Selected",
+        ];
+        assert_eq!(KEYS.len(), 12);
+        for key in KEYS {
+            assert!(SOURCES.iter().any(|s| s.contains(&format!("tr({key:?})"))), "missing original live Native tr() callsite: {key}");
+            let translated: Vec<_> = TABLE.iter().filter(|(source, _)| source == key).collect();
+            assert_eq!(translated.len(), 1, "absent or duplicate Hebrew Native label: {key}");
+            assert!(translated[0].1.chars().any(|c| ('\u{0590}'..='\u{05ff}').contains(&c)), "not Hebrew: {key}");
         }
     }
 }
