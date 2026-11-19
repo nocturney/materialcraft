@@ -187,6 +187,25 @@ mod language_switch_tests {
     use super::UiFonts;
     use std::sync::Arc;
 
+    /// Verify the active egui families after each language switch, not just the
+    /// retained FontData pointers. This catches a font-family reset that drops
+    /// a previously loaded script even though UiFonts still holds the bytes.
+    fn assert_active_scripts(ctx: &egui::Context, arabic: bool, hebrew: bool) {
+        let mut frame = ctx.run_ui(egui::RawInput::default(), |_| {});
+        frame.textures_delta.clear();
+        ctx.fonts_mut(|atlas| {
+            for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
+                let font_id = egui::FontId::new(18.0, family.clone());
+                if arabic {
+                    assert!(atlas.has_glyphs(&font_id, "سلام"), "{family:?} lost Arabic after language switch");
+                }
+                if hebrew {
+                    assert!(atlas.has_glyphs(&font_id, "שמירה פתיחה עברית"), "{family:?} lost Hebrew after language switch");
+                }
+            }
+        });
+    }
+
     /// A loaded font file is not enough: the active egui font families must
     /// actually be able to draw Hebrew after switching the UI language.
     #[test]
@@ -235,22 +254,27 @@ mod language_switch_tests {
         assert!(fonts.covers_arabic());
         assert!(!fonts.covers_hebrew());
         let first_arabic = fonts.arabic.as_ref().unwrap().clone();
+        assert_active_scripts(&ctx, true, false);
 
         fonts.update(&ctx, "he-IL", false);
         assert!(fonts.covers_hebrew());
         assert!(fonts.covers_arabic());
         let first_hebrew = fonts.hebrew.as_ref().unwrap().clone();
         assert!(Arc::ptr_eq(&first_arabic, fonts.arabic.as_ref().unwrap()));
+        assert_active_scripts(&ctx, true, true);
 
         // A non-RTL language must not discard previously loaded fallback faces.
         fonts.update(&ctx, "en-US", false);
         assert!(Arc::ptr_eq(&first_arabic, fonts.arabic.as_ref().unwrap()));
         assert!(Arc::ptr_eq(&first_hebrew, fonts.hebrew.as_ref().unwrap()));
+        assert_active_scripts(&ctx, true, true);
 
         // Before choosing a script, the language picker must show both names.
+        let picker_ctx = egui::Context::default();
         let mut picker_fonts = UiFonts::default();
-        picker_fonts.update(&egui::Context::default(), "en-US", true);
+        picker_fonts.update(&picker_ctx, "en-US", true);
         assert!(picker_fonts.covers_hebrew());
         assert!(picker_fonts.covers_arabic());
+        assert_active_scripts(&picker_ctx, true, true);
     }
 }
