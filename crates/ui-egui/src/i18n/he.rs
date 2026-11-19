@@ -591,6 +591,14 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Used range", "הטווח שבשימוש"),
     ("bits", "סיביות"),
     ("Close the Information panel", "סגירת חלונית המידע"),
+    ("packages saved", "חבילות נשמרו"),
+    ("Use Save as for:", "יש להשתמש ב׳שמירה בשם׳ עבור:"),
+    ("Not saved:", "לא נשמרו:"),
+    ("Build tileable materials from noises, patterns and filters, see them live in 2D and 3D, and export the maps for any engine.", "צרו חומרים בעלי מרקם רציף וחוזר באמצעות רעשים, דפוסים ומסננים, צפו בהם בזמן אמת בדו־ממד ובתלת־ממד וייצאו מפות לכל מנוע."),
+    ("Start from a template", "התחלה מתבנית"),
+    ("The log could not be saved", "לא ניתן לשמור את קובץ היומן"),
+    ("Engine suspended: choose Suspend engine in the Tools menu again (Shift+Escape) to resume", "המנוע מושהה: לחידוש הפעולה, בחרו שוב ב׳השהיית המנוע׳ בתפריט כלים (Shift+Escape)"),
+    ("Automatic", "אוטומטי"),
 ];
 
 #[cfg(test)]
@@ -1149,6 +1157,40 @@ mod hebrew_native_view2d_status_source_tests {
             let matches: Vec<_> = TABLE.iter().filter(|(source, _)| source == key).collect();
             assert_eq!(matches.len(), 1, "missing/duplicate Hebrew UI key: {key}");
             assert!(matches[0].1.chars().any(|ch| ('\u{0590}'..='\u{05ff}').contains(&ch)), "no Hebrew text: {key}");
+        }
+    }
+}
+
+
+#[cfg(test)]
+mod hebrew_native_save_home_export_source_tests {
+    use super::TABLE;
+
+    #[test]
+    fn native_save_home_export_and_suspended_engine_have_original_hebrew() {
+        const SOURCES: &[&str] = &[
+            include_str!("../windows.rs"),
+            include_str!("../home_screen.rs"),
+            include_str!("../native_dialogs.rs"),
+            include_str!("../toolbar.rs"),
+            include_str!("../export/outputs.rs"),
+        ];
+        const KEYS: &[&str] = &[
+            "packages saved",
+            "Use Save as for:",
+            "Not saved:",
+            "Build tileable materials from noises, patterns and filters, see them live in 2D and 3D, and export the maps for any engine.",
+            "Start from a template",
+            "The log could not be saved",
+            "Engine suspended: choose Suspend engine in the Tools menu again (Shift+Escape) to resume",
+            "Automatic",
+        ];
+        assert_eq!(KEYS.len(), 8);
+        for key in KEYS {
+            assert!(SOURCES.iter().any(|src| src.contains(&format!("tr({key:?})"))), "no original live Native tr() callsite for {key}");
+            let matches: Vec<_> = TABLE.iter().filter(|(source, _)| source == key).collect();
+            assert_eq!(matches.len(), 1, "missing/duplicate Hebrew source label: {key}");
+            assert!(matches[0].1.chars().any(|ch| ('\u{0590}'..='\u{05ff}').contains(&ch)), "label is not Hebrew: {key}");
         }
     }
 }
