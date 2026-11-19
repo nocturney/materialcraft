@@ -25,18 +25,22 @@ fn output_size_function_controls_resolution_and_survives_sbs() {
 
     let cooked = session.cook();
     let image = cooked.image(owner, 0).unwrap();
-    assert_eq!((image.w, image.h), (128, 32));
+
+    assert_eq!((image.width(), image.height()), (128, 32));
     assert!(cooked.nodes[&owner].error.is_none());
 
     let bytes = formats::sbs::write_sbs(&session.pkg).unwrap();
     let loaded = formats::sbs::read_sbs(&bytes, "parameter-functions.sbs", &|_| None).unwrap();
+
     assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
+
     let mut reopened = Session::new(loaded.pkg);
     reopened.preview_size = None;
     let owner = reopened.graph().unwrap().nodes.iter().find(|node| node.def == "uniform").unwrap().id;
     let cooked = reopened.cook();
     let image = cooked.image(owner, 0).unwrap();
-    assert_eq!((image.w, image.h), (128, 32));
+
+    assert_eq!((image.width(), image.height()), (128, 32));
 }
 
 #[test]
@@ -90,7 +94,8 @@ fn native_dynamic_output_size_is_not_discarded_on_load() {
     let cooked = session.cook();
 
     let image = cooked.image(owner, 0).unwrap();
-    assert_eq!((image.w, image.h), (64, 32));
+
+    assert_eq!((image.width(), image.height()), (64, 32));
 }
 
 #[test]
@@ -120,7 +125,7 @@ fn inherited_size_functions_use_nominal_input_size_before_preview_capping() {
     assert_eq!(cooked.nodes[&owner].error, None);
     assert_eq!(cooked.nodes[&owner].base.size, [256, 64]);
     assert_eq!(cooked.nodes[&owner].base_values[&BaseParameter::OutputSize], Value::Int2([1, 0]));
-    assert_eq!((cooked.image(owner, 0).unwrap().w, cooked.image(owner, 0).unwrap().h), (16, 4));
+    assert_eq!((cooked.image(owner, 0).unwrap().width(), cooked.image(owner, 0).unwrap().height()), (16, 4));
 
     command(
         &mut session,
@@ -267,7 +272,7 @@ fn instance_parameter_functions_work_without_stored_literals_and_use_instance_si
     assert_eq!(result.nodes[&owner].error, None);
     assert!(result.nodes[&owner].outputs.iter().any(|output| output.as_value() == Some(&Value::Float2([64.0, 32.0]))));
     assert!((result.image(owner, 0).unwrap().get_gray(0, 0, false) - 0.75).abs() < 1e-6);
-    assert_eq!((result.image(owner, 0).unwrap().w, result.image(owner, 0).unwrap().h), (64, 32));
+    assert_eq!((result.image(owner, 0).unwrap().width(), result.image(owner, 0).unwrap().height()), (64, 32));
     assert!(!session.graph().unwrap().node(owner).unwrap().params.contains_key("amount"));
 
     let bytes = formats::sbs::write_sbs(&session.pkg).unwrap();
@@ -394,7 +399,8 @@ fn base_functions_inherit_from_the_primary_input_and_bypasses_keep_input_dimensi
 
     let cooked = session.cook();
     let image = cooked.image(blend, 0).unwrap();
-    assert_eq!((image.w, image.h), (16, 16));
+
+    assert_eq!((image.width(), image.height()), (16, 16));
     assert_eq!(cooked.nodes[&blend].base.size, [32, 32]);
     assert_eq!(cooked.nodes[&output].base.size, [32, 32]);
 }

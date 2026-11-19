@@ -1,10 +1,17 @@
+use craft_texture::{Image, Kind};
 use materialcraft_core::{FunctionGraph, PatternGraph, PatternNodeKind, Value};
-use materialcraft_image::{Image, Kind};
 use materialcraft_nodes::{CookContext, find, resolve_params};
 use std::collections::BTreeMap;
 
-fn cook(def: &str, values: BTreeMap<String, Value>, inputs: &[Option<Image>]) -> Image {
+fn cook(def: &str, mut values: BTreeMap<String, Value>, inputs: &[Option<Image>]) -> Image {
     let definition = find(def).unwrap();
+
+    // Geometry and maximum-blend fixtures use unattenuated grayscale patterns
+    if def == "fx_map" {
+        values.entry("roughness".into()).or_insert(Value::Float(0.0));
+        values.entry("color_mode".into()).or_insert(Value::Bool(false));
+    }
+
     let params = resolve_params(definition, &values);
     let context = CookContext {
         format: materialcraft_core::OutputFormat::F32,
@@ -52,7 +59,7 @@ fn repeated_quadrants_have_distinct_reproducible_random_values() {
     let samples: Vec<_> = [(16, 16), (48, 16), (16, 48), (48, 48)].map(|(x, y)| image.get_gray(x, y, false)).into_iter().collect();
 
     assert!(samples.windows(2).all(|pair| pair[0] != pair[1]), "{samples:?}");
-    assert_eq!(image.data, cook("fx_map", values, &[]).data);
+    assert_eq!(image.data(), cook("fx_map", values, &[]).data());
 }
 
 #[test]
@@ -82,7 +89,7 @@ fn subpixel_quadrants_do_not_accumulate_at_shared_edges() {
     leaf.parameters.insert("opacity".into(), Value::Float(0.25));
     let image = cook("fx_map", BTreeMap::from([("pattern".into(), Value::PatternGraph(Box::new(graph)))]), &[]);
 
-    assert!(image.data.iter().all(|value| (*value - 0.25).abs() < 1e-6), "mean {}", image.mean()[0]);
+    assert!(image.data().iter().all(|value| (*value - 0.25).abs() < 1e-6), "mean {}", image.mean()[0]);
 }
 
 #[test]
@@ -98,5 +105,5 @@ fn grayscale_max_patterns_do_not_accumulate_opacity() {
     graph.nodes[0].parameters.insert("numberadded".into(), Value::Int(2));
     let repeated = cook("fx_map", values(graph), &[]);
 
-    assert!(single.data == repeated.data, "repeating a maximum blend must not brighten the image");
+    assert!(single.data() == repeated.data(), "repeating a maximum blend must not brighten the image");
 }

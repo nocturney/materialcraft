@@ -1,7 +1,7 @@
 use super::ATOMIC;
 use crate::ops;
 use crate::{CookContext, CookResult, NodeDefinition, node};
-use materialcraft_image::Kind;
+use craft_texture::Kind;
 
 pub(super) fn definition() -> NodeDefinition {
     node("hsl", "HSL", ATOMIC)
@@ -16,10 +16,11 @@ pub(super) fn definition() -> NodeDefinition {
 }
 
 fn hsl(context: &CookContext) -> CookResult {
-    let image = context.any_or(0, Kind::Color, [0.5, 0.5, 0.5, 1.0]).to_color();
+    let image = context.any_or(0, Kind::Color, [0.0; 4]).to_color();
 
     // The normalized slider spans one full turn in either direction from its midpoint
     let (hue_shift, saturation, lightness) = ((context.f("hue") - 0.5) * 2.0, context.f("saturation"), context.f("lightness"));
+
     Ok(vec![image.map(Kind::Color, |pixel| {
         let [h, s, l] = ops::rgb_to_hsl(pixel);
         let s = if saturation <= 0.5 { s * saturation * 2.0 } else { s + (1.0 - s) * (saturation - 0.5) * 2.0 };

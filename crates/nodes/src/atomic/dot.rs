@@ -1,6 +1,6 @@
 use super::GRAPH_ITEMS;
 use crate::{CookContext, CookResult, NodeDefinition, node};
-use materialcraft_image::{Image, Kind};
+use craft_texture::{Image, Kind};
 
 pub(super) fn definition() -> NodeDefinition {
     node("dot", "Dot", GRAPH_ITEMS).desc("A reroute point for wires.").atomic().any_in("input", "Input").any_out().cook(passthrough)

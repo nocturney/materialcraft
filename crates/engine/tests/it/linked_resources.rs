@@ -45,8 +45,8 @@ fn bundled_voronoi_bitmaps_load_the_shared_resource_and_survive_portable_saving(
         assert!(cooked.nodes[&node.id].error.is_none());
 
         let image = cooked.image(node.id, 0).unwrap();
-        let low = image.data.iter().copied().fold(f32::INFINITY, f32::min);
-        let high = image.data.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+        let low = image.data().iter().copied().fold(f32::INFINITY, f32::min);
+        let high = image.data().iter().copied().fold(f32::NEG_INFINITY, f32::max);
 
         assert!(low.is_finite() && high.is_finite() && high > low);
     }

@@ -1,5 +1,5 @@
+use craft_texture::{Image, Kind};
 use materialcraft_core::{FunctionGraph, Value};
-use materialcraft_image::{Image, Kind};
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{EvaluationContext, EvaluationState, FUNCTIONS, compile, default_value};
@@ -37,7 +37,9 @@ fn every_native_function_executes_with_its_declared_ports() {
     let mut covered = BTreeSet::new();
     for definition in FUNCTIONS {
         let name = definition.id;
+
         assert!(covered.insert(name), "duplicate {name}");
+
         let mut graph = FunctionGraph::default();
         let mut variables = BTreeMap::new();
         let mut setting = default_value(name);
@@ -131,11 +133,13 @@ fn branches_are_lazy_and_sequence_orders_side_effects() {
     let expected = graph.add_constant(Value::Int(17));
     let undefined = graph.add("get_integer1", &[], Some(Value::Text("missing".into())));
     graph.output = Some(graph.add("ifelse", &[condition, expected, undefined], None));
+
     assert_eq!(evaluate(&graph, &BTreeMap::new()).unwrap(), Value::Int(17));
 
     let set = graph.add("set", &[expected], Some(Value::Text("stored".into())));
     let get = graph.add("get_integer1", &[], Some(Value::Text("stored".into())));
     graph.output = Some(graph.add("sequence", &[set, get], None));
+
     assert_eq!(evaluate(&graph, &BTreeMap::new()).unwrap(), Value::Int(17));
 }
 
@@ -153,18 +157,22 @@ fn time_and_tiling_variables_have_typed_defaults_and_host_overrides() {
             let expected = variables.get(name).unwrap_or(&default);
             let context = EvaluationContext { scope: Default::default(), position: [0.5; 2], size: [1.0; 2], images: &[], tile: true, variables: &variables };
             let program = compile(&graph, 0).unwrap();
+
             assert_eq!(program.evaluate(&context, &mut EvaluationState::default()).unwrap(), *expected);
             assert_eq!(program.evaluate_pixel(&context, &mut EvaluationState::default()).unwrap(), *expected);
         }
 
         assert!(evaluate(&graph, &BTreeMap::from([(name.into(), Value::Bool(false))])).unwrap_err().contains("wrong type"));
+
         graph.output = Some(defined);
+
         assert_eq!(evaluate(&graph, &BTreeMap::new()).unwrap(), Value::Bool(true));
     }
 
     let mut graph = FunctionGraph::default();
     graph.output = Some(graph.add("get_integer1", &[], Some(Value::Text("$tiling".into()))));
     let context = EvaluationContext { scope: Default::default(), position: [0.5; 2], size: [1.0; 2], images: &[], tile: false, variables: &BTreeMap::new() };
+
     assert_eq!(compile(&graph, 0).unwrap().evaluate(&context, &mut EvaluationState::default()).unwrap(), Value::Int(0));
 }
 
@@ -180,10 +188,12 @@ fn loops_recompute_state_and_have_a_budget() {
     let add = graph.add("add", &[get, one], None);
     let body = graph.add("set", &[add], Some(Value::Text("counter".into())));
     graph.output = Some(graph.add("while", &[init, condition, body], Some(Value::Int(-1))));
+
     assert_eq!(evaluate(&graph, &BTreeMap::new()).unwrap(), Value::Int(3));
 
     let condition = graph.add_constant(Value::Bool(false));
     graph.output = Some(graph.add("while", &[zero, condition, one], Some(Value::Int(-1))));
+
     assert!(evaluate(&graph, &BTreeMap::new()).unwrap_err().contains("budget"));
 }
 
@@ -195,9 +205,12 @@ fn deep_graphs_shared_inputs_and_cycles_do_not_recurse() {
         previous = graph.add("passthrough", &[previous], None);
     }
     graph.output = Some(graph.add("abs", &[previous], None));
+
     assert_eq!(evaluate(&graph, &BTreeMap::new()).unwrap(), Value::Float(1.0));
+
     graph.nodes[0].op = "passthrough".into();
     graph.nodes[0].inputs = vec![Some(previous)];
+
     assert!(compile(&graph, 0).err().unwrap().contains("cycle"));
 
     let mut graph = FunctionGraph::constant(Value::Float(1.0));
@@ -206,6 +219,7 @@ fn deep_graphs_shared_inputs_and_cycles_do_not_recurse() {
         previous = graph.add("add", &[previous, previous], None);
     }
     graph.output = Some(previous);
+
     assert_eq!(evaluate(&graph, &BTreeMap::new()).unwrap(), Value::Float(1_073_741_824.0));
 }
 
@@ -236,6 +250,7 @@ fn pixel_assignments_are_local_and_match_exported_evaluation() {
 
     let read_only = compile(&FunctionGraph::constant(Value::Float(0.5)), 7).unwrap();
     let context = EvaluationContext { scope: Default::default(), position: [0.5; 2], size: [1.0; 2], images: &[], tile: true, variables: &BTreeMap::new() };
+
     assert_eq!(read_only.evaluate_pixel(&context, &mut pixel_state).unwrap(), Value::Float(0.5));
     assert!(pixel_state.variables().is_empty());
 }
@@ -253,6 +268,7 @@ fn pixel_random_seed_and_defined_variables_match_general_evaluation() {
     for variables in [BTreeMap::from([("$randomseed".into(), Value::Int(42)), ("known".into(), Value::Bool(true))]), BTreeMap::new()] {
         let context = EvaluationContext { scope: Default::default(), position: [0.5; 2], size: [1.0; 2], images: &[], tile: true, variables: &variables };
         let expected = program.evaluate(&context, &mut EvaluationState::default()).unwrap();
+
         assert_eq!(program.evaluate_pixel(&context, &mut state).unwrap(), expected);
     }
 }
@@ -587,6 +603,7 @@ fn unconnected_ifelse_branches_use_the_value_type_not_the_condition() {
                     node.type_code = declared_type;
                     let selected = if condition_value { 1 } else { 2 };
                     let expected = if selected == missing { zero.clone() } else { value.clone() };
+
                     assert_eq!(evaluate(&graph, &BTreeMap::new()).unwrap(), expected);
                 }
             }
@@ -603,6 +620,7 @@ fn unconnected_ifelse_condition_stays_boolean_and_empty_branches_keep_declared_t
     let node = graph.nodes.last_mut().unwrap();
     node.inputs = vec![None, Some(branch), None];
     node.type_code = 0;
+
     assert_eq!(evaluate(&graph, &BTreeMap::new()).unwrap(), Value::Float(0.0));
 
     for condition_value in [false, true] {
@@ -612,6 +630,7 @@ fn unconnected_ifelse_condition_stays_boolean_and_empty_branches_keep_declared_t
         let node = graph.nodes.last_mut().unwrap();
         node.inputs = vec![Some(condition), None, None];
         node.type_code = 512;
+
         assert_eq!(evaluate(&graph, &BTreeMap::new()).unwrap(), Value::Float2([0.0; 2]));
     }
 }

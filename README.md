@@ -145,11 +145,12 @@ cargo run --release -p materialcraft                          # desktop app
 cargo run --release -p materialcraft -- package.sbs           # open an SBS package
 cargo run --release -p materialcraft -- --control 7878        # + JSON control channel
 cargo run --release -p materialcraft-cli -- mcp               # MCP server (stdio)
-cargo run --release -p materialcraft-cli -- new wood wood.sbs
-cargo run --release -p materialcraft-cli -- render wood.sbs wood.png --scene sphere --full --hq
-cargo run --release -p materialcraft-cli -- export wood.sbs textures --format png --depth 16
+cargo run --release -p materialcraft-cli -- new pbr surface.sbs --name Surface
+cargo run --release -p materialcraft-cli -- render surface.sbs surface.png --scene sphere --full --hq
+cargo run --release -p materialcraft-cli -- export surface.sbs textures --format png --depth 16
 cargo run --release -p materialcraft-cli -- export my.sbs out --set wear=0.7    # with a graph input "wear" set first
-cargo run --release -p materialcraft-cli -- run my.sbs file.exportMaterial '{"path": "my.mcmat", "size": 2048}'   # for TextureCraft
+cargo run --release -p materialcraft-cli -- publish surface.sbs surface.mcmat --graph Surface
+cargo run --release -p materialcraft-cli -- export surface.mcmat build/surface --profile materialx --size 512
 cd apps/materialcraft-web && trunk serve                      # web build
 cargo xtask ci                                                # fmt, clippy, tests, layering, wasm
 ```
@@ -178,14 +179,15 @@ The details are in [`docs/control-protocol.md`](docs/control-protocol.md).
 MaterialCraft is under active development. [**ROADMAP.md**](ROADMAP.md) has the parity estimate by
 area, the remaining work and what's next.
 
-**Current focus (2026-11-05):** primitive editing and native SBS save/load. The old Rust
-procedural library has been removed. The replacement includes 30 main-graph entries, 85 function
-operations and three pattern node kinds. Start with **File → New → Atomic sample**.
+**Current focus (2026-11-16):** node behavior, regression coverage and SBS save/load. The old Rust
+procedural library has been removed. The replacement includes 29 main-graph entries, 85 function
+operations and four pattern node kinds. Start with **File → New → Atomic sample**.
 
 See [the primitive workflow](docs/atomic-workflow.md) for usage, validation scope and limitations.
-Reference-app rendering parity and full SBS library loading are still pending.
+The [catalog status](docs/node-catalog-parity.md) records implemented behavior and remaining work.
+Full numerical compatibility and arbitrary SBS interoperability remain unestablished.
 
-**Workspace:** `crates/{core, image, geom, nodes, eval, formats, engine, render, automation, ui-egui}`
+**Workspace:** `crates/{core, geom, nodes, eval, formats, engine, render, automation, ui-egui}`
 and `apps/{materialcraft, materialcraft-cli, materialcraft-web}`. The egui frontend is its own
 crate, so the UI can be swapped without touching the engine; [`docs/architecture.md`](docs/architecture.md)
 explains how it fits together.

@@ -85,7 +85,7 @@ fn dynamic_roughness_survives_native_saving_and_invalidates_the_cook_cache() {
             let cached = materialcraft_engine::eval::cook(&package, 0, &options, &cache);
 
             assert!(cached.nodes[&owner].cached);
-            assert_eq!(cached.image(owner, 0).unwrap().data, result.image(owner, 0).unwrap().data);
+            assert_eq!(cached.image(owner, 0).unwrap().data(), result.image(owner, 0).unwrap().data());
         }
     }
 }

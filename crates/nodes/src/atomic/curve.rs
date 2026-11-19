@@ -1,22 +1,24 @@
 use super::ATOMIC;
 use crate::{CookContext, CookResult, NodeDefinition, node};
-use materialcraft_image::Kind;
+use craft_texture::Kind;
 
 pub(super) fn definition() -> NodeDefinition {
     node("curve", "Curve", ATOMIC).desc("Remaps values through a tone curve.").atomic().any_in("input", "Input").curve("curve", "Curve").any_out().cook(curve)
 }
 
 fn curve(context: &CookContext) -> CookResult {
-    let img = context.any_or(0, Kind::Gray, [0.0; 4]);
-    let c = context.curve("curve");
-    // A 1024-entry table: the curve is smooth, so linear lookups are exact enough
-    let lut: Vec<f32> = (0..=1024).map(|i| c.eval(i as f32 / 1024.0)).collect();
-    let f = |v: f32| {
-        let t = v.clamp(0.0, 1.0) * 1024.0;
-        let i = t as usize;
-        let a = lut.get(i).copied().unwrap_or(0.0);
-        let b = lut.get(i + 1).copied().unwrap_or(a);
-        a + (b - a) * (t - i as f32)
+    let image = context.any_or(0, Kind::Gray, [0.0; 4]);
+    let curve = context.curve("curve");
+
+    // Linear interpolation over 1024 intervals approximates the smooth curve
+    const TABLE_INTERVALS: usize = 1024;
+    let table: Vec<f32> = (0..=TABLE_INTERVALS).map(|i| curve.eval(i as f32 / TABLE_INTERVALS as f32)).collect();
+    let lookup = |value: f32| {
+        let position = value.clamp(0.0, 1.0) * TABLE_INTERVALS as f32;
+        let i = position as usize;
+        let a = table.get(i).copied().unwrap_or(0.0);
+        let b = table.get(i + 1).copied().unwrap_or(a);
+        a + (b - a) * (position - i as f32)
     };
-    Ok(vec![img.map(img.kind, |p| [f(p[0]), f(p[1]), f(p[2]), p[3]])])
+    Ok(vec![image.map(image.kind(), |p| [lookup(p[0]), lookup(p[1]), lookup(p[2]), p[3]])])
 }

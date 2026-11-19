@@ -1,6 +1,6 @@
 use super::ATOMIC;
 use crate::{CookContext, CookResult, NodeDefinition, node};
-use materialcraft_image::Kind;
+use craft_texture::Kind;
 
 pub(super) fn definition() -> NodeDefinition {
     node("levels", "Levels", ATOMIC)
@@ -24,7 +24,7 @@ fn levels(context: &CookContext) -> CookResult {
     let output_low = context.v4("out_low");
     let output_high = context.v4("out_high");
 
-    Ok(vec![image.map(image.kind, |pixel| {
+    Ok(vec![image.map(image.kind(), |pixel| {
         std::array::from_fn(|channel| levels_fn(pixel[channel], low[channel], mid[channel], high[channel], output_low[channel], output_high[channel]))
     })])
 }

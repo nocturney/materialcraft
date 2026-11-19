@@ -4,8 +4,8 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use craft_texture::{Image, Kind};
 use materialcraft_core::Package;
-use materialcraft_image::{Image, Kind};
 
 use crate::{NodeLibrary, Session};
 
@@ -32,7 +32,7 @@ impl NodeLibrary {
         let index = source.graphs.iter().position(|candidate| candidate.function.is_none() && candidate.sbs_path() == graph)?;
         let size = size.clamp(1, COOKED_SIZE);
 
-        // A session links the graph's instances and functions to the library, as an opened package gets
+        // A session resolves library references just as it does for an opened package
         let mut session = Session::with_library(Package::clone(source), library.clone());
         session.limit_preview_caches();
         if cancel.load(Ordering::Relaxed) {
@@ -43,7 +43,7 @@ impl NodeLibrary {
         let decode = session.resource_decoder();
         let mut options = materialcraft_eval::Options::new(&decode);
 
-        // Thin lines and fine grain vanish when cooked at thumbnail size, so the graph cooks larger and is scaled down
+        // Cook larger before downsampling so fine detail survives in thumbnails
         let cooked_size = size.max(COOKED_SIZE);
         options.max_size = Some(cooked_size);
         options.cancel = Some(cancel);
@@ -60,7 +60,7 @@ impl NodeLibrary {
         let outputs = materialcraft_eval::outputs(graph, &cooked);
         let base_color = outputs.iter().find(|(_, usage, _, image)| *usage == "baseColor" && image.is_some());
         let image = base_color.or_else(|| outputs.iter().find(|output| output.3.is_some()))?.3?;
-        (!is_flat(image)).then(|| image.resize(size.min(image.w), size.min(image.h), false))
+        (!is_flat(image)).then(|| image.resize(size.min(image.width()), size.min(image.height()), false))
     }
 }
 
@@ -101,8 +101,8 @@ fn sample_inputs(graph: &materialcraft_core::Graph, size: u32) -> BTreeMap<Strin
 fn is_flat(image: &Image) -> bool {
     let mut low = [f32::INFINITY; 3];
     let mut high = [f32::NEG_INFINITY; 3];
-    for y in 0..i64::from(image.h) {
-        for x in 0..i64::from(image.w) {
+    for y in 0..i64::from(image.height()) {
+        for x in 0..i64::from(image.width()) {
             let pixel = image.get(x, y, false);
             for channel in 0..3 {
                 low[channel] = low[channel].min(pixel[channel]);

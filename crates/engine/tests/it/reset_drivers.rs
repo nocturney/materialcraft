@@ -13,6 +13,7 @@ fn setup() -> (Session, NodeId) {
     let mut s = new_session();
     s.preview_size = Some(32);
     let source = run(&mut s, "graph.node.add", json!({"def": "uniform"}))["id"].as_u64().unwrap();
+    run(&mut s, "graph.node.param", json!({"id": source, "param": "color", "value": [0.5, 0.5, 0.5, 1.0]}));
     let levels = NodeId(run(&mut s, "graph.node.add", json!({"def": "levels", "connectFrom": {"node": source}}))["id"].as_u64().unwrap());
     (s, levels)
 }

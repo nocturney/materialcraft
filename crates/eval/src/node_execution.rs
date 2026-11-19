@@ -6,8 +6,8 @@ use crate::{
     prepared_graph::PreparedGraph,
     value_execution::evaluate_value,
 };
+use craft_texture::{Image, Kind};
 use materialcraft_core::{Node, Package, Value};
-use materialcraft_image::{Image, Kind};
 use materialcraft_nodes::{CookContext, find};
 use std::{
     collections::BTreeMap,
@@ -32,6 +32,7 @@ pub(crate) fn cook_node(
     cooked: &Cooked,
     graph_variables: &BTreeMap<String, Value>,
     options: &Options,
+    input_image: Option<&Image>,
     cache: &Mutex<Cache>,
 ) -> NodeResult {
     let (input_ports, output_ports) = prepared.ports(node.id);
@@ -114,7 +115,9 @@ pub(crate) fn cook_node(
         return fail(error, 0);
     }
 
-    if !node.functions.is_empty() || matches!(node.def.as_str(), "pixel_processor" | "value_processor" | "fx_map" | "transformation") {
+    if !node.functions.is_empty()
+        || matches!(node.def.as_str(), "pixel_processor" | "value_processor" | "fx_map" | "transformation" | "blur" | "directional_blur" | "sharpen")
+    {
         base.variables(variables.to_mut());
     }
 
@@ -127,8 +130,6 @@ pub(crate) fn cook_node(
 
     let tile = base.tiling[0] && base.tiling[1];
 
-    // Input nodes read the caller's image for their identifier
-    let input_image = node.def.starts_with("input_").then(|| options.inputs.get(&identifier(node))).flatten();
     let resource_hash = match parameters.get("resource") {
         Some(Value::Text(name)) => package.resource(name).map_or(0, |r| r.bytes.content_hash()),
         _ => 0,
@@ -175,7 +176,7 @@ pub(crate) fn cook_node(
     } else if matches!(node.def.as_str(), "output" | "dot") && incoming.first().and_then(Option::as_ref).is_some_and(|output| output.as_value().is_some()) {
         incoming.first().copied().flatten().cloned().map(|output| vec![output]).ok_or("missing value input".into())
     } else if let Some(image) = input_image {
-        let mut image = if node.def == "input_grayscale" && image.kind == Kind::Color {
+        let mut image = if node.def == "input_grayscale" && image.kind() == Kind::Color {
             // Grayscale bridges use equal RGB weights and preserve fused float order
             let weight = 1.0 / 3.0;
             image.map(Kind::Gray, |pixel| [pixel[2].mul_add(weight, pixel[1].mul_add(weight, pixel[0] * weight)), 0.0, 0.0, 0.0])
@@ -187,12 +188,12 @@ pub(crate) fn cook_node(
 
         // Bound resources clamp edges through stored factor-two levels
         // Preserve resampling and storage conversion for HDR bridges
-        let resized = image.w != w || image.h != h;
-        while image.w != w || image.h != h {
+        let resized = image.width() != w || image.height() != h;
+        while image.width() != w || image.height() != h {
             let next = |current: u32, target: u32| {
                 if current < target { current.saturating_mul(2).min(target) } else { current.div_ceil(2).max(target) }
             };
-            image = crate::output_precision::apply(image.resize(next(image.w, w), next(image.h, h), false), base.format);
+            image = crate::output_precision::apply(image.resize(next(image.width(), w), next(image.height(), h), false), base.format);
         }
 
         // Resized inputs already store the final level at the declared precision

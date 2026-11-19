@@ -25,7 +25,7 @@ fn archived_sbs_replaces_surface_references_from_the_shared_library() {
 
 fn package() -> Package {
     let mut package = Package::new("Surface");
-    let pixels = materialcraft_image::Image::filled(2, 2, materialcraft_image::Kind::Color, [0.2, 0.4, 0.8, 1.0]);
+    let pixels = craft_texture::Image::filled(2, 2, craft_texture::Kind::Color, [0.2, 0.4, 0.8, 1.0]);
     let png = encode(&pixels, "png", Depth::U8, true).unwrap();
     package.resources.push(Resource::new("Texture", "texture.png", ResourceBytes::new(png)));
     package.resources.push(Resource::new("Shape", "shape.svg", ResourceBytes::new(SVG.to_vec())));

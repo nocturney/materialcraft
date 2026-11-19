@@ -1,6 +1,7 @@
 mod bitmap;
 mod blend;
 mod blur;
+mod box_filter;
 mod channels_shuffle;
 mod curve;
 mod directional_blur;

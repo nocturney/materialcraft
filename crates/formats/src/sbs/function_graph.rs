@@ -156,7 +156,12 @@ pub(super) fn write(graph: &FunctionGraph, writer: &mut SbsWriter) -> Result<Str
         } else if let Some(instance) = &node.instance {
             output.push_str(&super::function_instance::write(instance, writer));
         } else if let Some(value) = &node.value {
-            let constant = constant_xml(value).ok_or("function data must be a scalar or vector constant")?;
+            // Loop limits require scalar integer data rather than an enum-style integer tag
+            let constant = if let ("while", Value::Int(limit)) = (node.op.as_str(), value) {
+                format!("<constantValueInt1 v=\"{limit}\"/>")
+            } else {
+                constant_xml(value).ok_or("function data must be a scalar or vector constant")?
+            };
             let _ =
                 write!(output, "<funcDatas><funcData><name v=\"{}\"/><constantValue>{constant}</constantValue></funcData></funcDatas>", xml_escape(&node.op));
         }
@@ -167,6 +172,7 @@ pub(super) fn write(graph: &FunctionGraph, writer: &mut SbsWriter) -> Result<Str
         super::canvas::write_items(&mut output, &graph.annotations.frames, &graph.annotations.comments, &graph.annotations.pins, writer);
     }
     output.push_str("</dynamicValue>");
+
     Ok(output)
 }
 

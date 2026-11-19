@@ -9,7 +9,7 @@ pub fn output_usage(node: &Node) -> &'static str {
     };
     ComponentUsage::from_index(index).id
 }
-use materialcraft_image::Image;
+use craft_texture::Image;
 
 /// The graph's output nodes with their usage id and image, in node order
 pub fn outputs<'c>(graph: &Graph, cooked: &'c Cooked) -> Vec<(NodeId, &'static str, String, Option<&'c Image>)> {

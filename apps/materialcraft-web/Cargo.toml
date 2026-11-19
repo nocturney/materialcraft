@@ -13,15 +13,15 @@ workspace = true
 name = "materialcraft-web"
 path = "src/main.rs"
 
-[dependencies]
-materialcraft-engine = { workspace = true }
-materialcraft-ui-egui = { workspace = true }
-log = { workspace = true }
-
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-# `wgpu` pulls egui-wgpu's defaults: WebGPU plus the WebGL2 fallback.
+materialcraft-engine = { workspace = true }
+log = { workspace = true }
+materialcraft-ui-egui = { workspace = true }
+# `wgpu` pulls egui-wgpu's defaults: WebGPU plus the WebGL2 fallback
 eframe = { workspace = true, features = ["default_fonts", "wgpu", "accesskit", "persistence"] }
+# The SBS library's `resources/`, which the browser build downloads at startup
+materialcraft-formats = { workspace = true }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
-web-sys = { version = "0.3", features = ["Window", "Document", "Element", "HtmlCanvasElement", "Location", "KeyboardEvent", "EventTarget", "AddEventListenerOptions"] }
+web-sys = { version = "0.3", features = ["Window", "Document", "Element", "HtmlCanvasElement", "Location", "KeyboardEvent", "EventTarget", "AddEventListenerOptions", "Response", "RequestInit", "AbortController", "AbortSignal"] }

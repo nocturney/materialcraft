@@ -61,9 +61,14 @@ cargo +1.96.0 run -p materialcraft-engine --release --example atomic_sample -- e
 
 | Context | Entries |
 |---|---:|
-| Main graph | 26 native primitives, including processors and reroute, plus 4 input/output items |
+| Main graph | 25 native primitives, including processors and reroute, plus 4 input/output items |
 | Functions | 85 native operations |
 | FX-Map graph | Quadrant (`paramset`), Switch (`markov2`), Iterate (`addnode`), Dot (`passthrough`) |
+
+The former count of 26 primitives included `motion_blur`, removed in commit `a0032d6`.
+It was a MaterialCraft wrapper around Directional Blur. The count of 25 includes Dot/reroute.
+The [catalog status](node-catalog-parity.md) records the current 25 primitives plus four
+input/output entries.
 
 Image primitives have individual files in `crates/nodes/src/atomic/`. Function evaluation and
 pattern traversal have separate modules. Document types each live in their own file under
@@ -82,9 +87,9 @@ SBS library reference resolution is outside this change.
 
 ## Current limits
 
-- Reopening the generated SBS in the reference application has not been verified
-- Native IDs, ports and types are mapped, but numerical parity with the reference renderer has
-  not been established, including pattern shapes, blending, sampling and random sequences
+- SBS version-header compatibility remains unresolved
+- Node IDs, ports and types are mapped. The [catalog status](node-catalog-parity.md) records
+  remaining numerical and interoperability gaps; broad rendering parity is unestablished
 - Text renders the original built-in stroke font; external font references produce an explicit
   error. SVG supports vector geometry, without external images or font loading
 - Some native parameter variants and package/editor metadata remain unsupported; import reports

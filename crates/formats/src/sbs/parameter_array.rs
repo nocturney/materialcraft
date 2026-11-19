@@ -93,7 +93,7 @@ pub(super) fn write(value: &Value, color_mode: bool, writer: &mut SbsWriter) -> 
         }
         Value::Gradient(gradient) => {
             for key in &gradient.keys {
-                let color = if color_mode { Value::Color(key.color) } else { Value::Float(materialcraft_image::luminance(key.color)) };
+                let color = if color_mode { Value::Color(key.color) } else { Value::Float(craft_texture::luminance(key.color)) };
                 cell(vec![("position", Value::Float(key.pos)), ("midpoint", Value::Float(key.midpoint)), ("value", color)]);
             }
         }

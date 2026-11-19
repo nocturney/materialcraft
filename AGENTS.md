@@ -89,7 +89,7 @@ file first, then `docs/`.
 
 ```text
 crates/
-  core image geom            L0 document model (package, graphs, nodes, values, function graphs); float images; meshes, BVH, camera
+  core geom                  L0 document model (package, graphs, nodes, values, function graphs); meshes, BVH, camera
   nodes                      L1 the node library: native primitive definitions + CPU cooks, function evaluator and pattern graphs
   eval formats               L2 graph cooking (topological order, sizes, content-addressed cache, sub-graphs); native .sbs packages, bitmaps, texture export
   engine render              L3 Session + command registry (every action is a command), inspect, samples; the 3D preview renderer (CPU PBR + IBL)
@@ -236,3 +236,7 @@ after every arc of work that builds and passes.
 - `docs/releasing.md`: release builds and signing.
 - `plan/` is an optional gitignored notebook (execution notes). Do not ask for it and do not stop when it is absent.
 - `log/` (local, gitignored): the dev log.
+
+## Shared Craft libraries
+
+Before adding or changing reusable file-format, codec, protocol or UI code, check [craft-libs](https://github.com/storytold/craft-libs) and existing contributor work; reuse its public APIs or extend the appropriate shared library instead of adding an app-local duplicate, keeping app-specific policy and model mapping local and preserving compatibility, security limits and regression coverage.

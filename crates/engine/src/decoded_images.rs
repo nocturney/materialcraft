@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use materialcraft_image::Image;
+use craft_texture::Image;
 
 const DEFAULT_LIMIT_BYTES: usize = 128 << 20;
 const MAX_ENTRIES: usize = 128;
@@ -68,20 +68,20 @@ impl DecodedImages {
 }
 
 fn bytes(image: &Image) -> usize {
-    image.data.len().saturating_mul(size_of::<f32>())
+    image.data().len().saturating_mul(size_of::<f32>())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use materialcraft_image::Kind;
+    use craft_texture::Kind;
     use std::sync::Arc;
 
     #[test]
     fn repeated_decodes_are_bounded_and_evicted_images_are_released() {
         let mut cache = DecodedImages::new(128);
         let image = Image::filled(4, 4, Kind::Gray, [0.5; 4]);
-        let weak = Arc::downgrade(&image.data);
+        let weak = Arc::downgrade(image.shared_data());
         cache.insert((0, false), image);
         for key in 1..1_000 {
             cache.insert((key, key % 2 == 0), Image::filled(4, 4, Kind::Gray, [0.5; 4]));
@@ -113,7 +113,7 @@ mod tests {
         assert!(cache.get(&(1, false)).is_none());
 
         let large = Image::filled(16, 16, Kind::Gray, [0.5; 4]);
-        let weak = Arc::downgrade(&large.data);
+        let weak = Arc::downgrade(large.shared_data());
         cache.insert((3, false), large);
 
         assert!(weak.upgrade().is_none());

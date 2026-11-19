@@ -46,7 +46,7 @@ fn compile_nested(graph: &FunctionGraph, seed: u32, depth: usize, remaining: &mu
         };
         let names: Vec<_> = super::input_identifiers(node).collect();
 
-        // An operation computes with zero on an input nothing is connected to; a call needs a source default instead
+        // Operations use zero for absent inputs; calls require source defaults
         let missing_input = node
             .instance
             .as_ref()
@@ -55,7 +55,7 @@ fn compile_nested(graph: &FunctionGraph, seed: u32, depth: usize, remaining: &mu
             return Err(format!("{} ({id}) requires connected inputs: {}", super::node_label(node), names.join(", ")));
         }
 
-        // Preserved legacy connectors must not evaluate a duplicate random or stateful input twice
+        // Legacy connectors must not evaluate stateful inputs twice
         let ports: Vec<_> = names
             .into_iter()
             .zip(&node.inputs)
@@ -79,7 +79,7 @@ fn compile_nested(graph: &FunctionGraph, seed: u32, depth: usize, remaining: &mu
             connected
         } else {
             let sibling = if node.op == "ifelse" {
-                // The condition is Boolean; absent value branches must use a value-port type.
+                // Absent value branches must use a value-port type
                 ports.iter().skip(1).find_map(|(_, input)| {
                     input.and_then(|id| indices.get(&id)).and_then(|index| instructions.get(*index)).map(|instruction| instruction.type_code)
                 })
@@ -88,11 +88,18 @@ fn compile_nested(graph: &FunctionGraph, seed: u32, depth: usize, remaining: &mu
             };
             let mut connected = connected.into_iter();
             let mut inputs = Vec::with_capacity(ports.len());
-            for (name, input) in &ports {
+            for (slot, (name, input)) in ports.iter().enumerate() {
                 let index = match input {
                     Some(_) => connected.next().ok_or("unresolved function input")?,
                     None => {
-                        let (definition, value) = unconnected(name, sibling.unwrap_or(node.type_code))?;
+                        let sibling_type_code = ports
+                            .get(if slot == 0 { 1 } else { 0 })
+                            .and_then(|(_, input)| **input)
+                            .and_then(|id| indices.get(&id))
+                            .and_then(|index| instructions.get(*index))
+                            .map(|instruction| instruction.type_code);
+                        let kind = super::unconnected_input::value_type(&node.op, name, sibling.unwrap_or(node.type_code), sibling_type_code);
+                        let (definition, value) = unconnected(kind)?;
                         let type_code = super::value_type::type_code(&value);
                         instructions.push(Instruction {
                             id: 0,
@@ -154,6 +161,7 @@ fn compile_nested(graph: &FunctionGraph, seed: u32, depth: usize, remaining: &mu
     }
 
     let output = indices.get(&output).copied().ok_or("missing result instruction")?;
+
     Ok(Program { instructions, output, seed })
 }
 
@@ -173,11 +181,10 @@ fn loop_members(instructions: &[Instruction], index: usize) -> Vec<usize> {
     member.iter().enumerate().filter(|(_, member)| **member).map(|(index, _)| index).collect()
 }
 
-/// The constant an unconnected input `name` reads: false for a condition, otherwise zero of the type its node works with
-fn unconnected(name: &str, type_code: u32) -> Result<(&'static super::FunctionDefinition, materialcraft_core::Value), String> {
+/// The constant an unconnected input reads: false or zero of the operand type
+fn unconnected(value_type: materialcraft_core::ValueType) -> Result<(&'static super::FunctionDefinition, materialcraft_core::Value), String> {
     use materialcraft_core::ValueType;
 
-    let value_type = if matches!(name, "cond" | "condition") { ValueType::Boolean } else { ValueType::from_code(type_code).unwrap_or(ValueType::Float) };
     let operation = match value_type {
         ValueType::Boolean => "const_bool",
         ValueType::Integer => "const_int1",
@@ -191,5 +198,6 @@ fn unconnected(name: &str, type_code: u32) -> Result<(&'static super::FunctionDe
         ValueType::String => "const_string",
     };
     let definition = catalog::definition(operation).ok_or("missing constant operation")?;
+
     Ok((definition, value_type.default_value()))
 }

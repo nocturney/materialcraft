@@ -266,6 +266,7 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Return to parent graph", "חזרה לגרף האב"),
     ("Revert", "שחזור למצב הקודם"),
     ("Right-click a node parameter > Expose as graph input", "לחצו לחיצה ימנית על פרמטר בצומת > חשיפה כקלט לגרף"),
+    ("Root graph", "גרף שורש"),
     ("Rotation", "סיבוב"),
     ("Samples", "דוגמאות"),
     ("Save", "שמירה"),
@@ -299,6 +300,7 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Show nodes not in MaterialCraft yet", "הצגת צמתים שעדיין אינם זמינים ב־MaterialCraft"),
     ("Size", "גודל"),
     ("Snap to grid", "הצמדה לרשת"),
+    ("Source normals", "נורמלים של המקור"),
     ("Specific parameters", "פרמטרים ייחודיים"),
     ("Start export", "התחלת ייצוא"),
     ("Step", "צעד"),
@@ -353,6 +355,7 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Height level (0 = rises out of the surface)", "מפלס גובה (0 = בליטה מעל פני השטח)"),
     ("Include preview.png", "כלילת preview.png"),
     ("Material", "חומר"),
+    ("Materials", "חומרים"),
     ("Normal orientation", "כיוון מפת הנורמל"),
     (
         "One .mcmat archive: material.mtlx, material.json, resources/ and the optional preview.png",
@@ -439,7 +442,10 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Maximum stored previews", "מספר מרבי של תצוגות מקדימות שמורות"),
     ("Previews rebuild as they come into view.", "התצוגות המקדימות נבנות מחדש כשהן מוצגות."),
     ("Gaussian blur.", "טשטוש גאוסי."),
-    ("Blends a foreground over a background with a blending mode, weighted by opacity and an optional mask.", "ממזג את שכבת החזית עם הרקע לפי מצב המיזוג, תוך שקלול האטימות ומסכה אופציונלית."),
+    (
+        "Blends a foreground over a background with a blending mode, weighted by opacity and an optional mask.",
+        "ממזג את שכבת החזית עם הרקע לפי מצב המיזוג, תוך שקלול האטימות ומסכה אופציונלית.",
+    ),
     ("An output of the graph: a material channel (usage) or any image.", "פלט הגרף: ערוץ חומר (ייעוד) או תמונה מכל סוג."),
     ("Remaps the input range, midtones and output range.", "ממפה מחדש את טווח הקלט, גוני הביניים וטווח הפלט."),
     ("Transforms the input with an offset and a 2 by 2 matrix.", "מבצע התמרה לקלט באמצעות היסט ומטריצה בגודל 2×2."),
@@ -626,26 +632,19 @@ mod hebrew_view3d_material_export_tests {
 
     #[test]
     fn native_view3d_and_material_export_controls_are_hebrew() {
-        let sources = [include_str!("../view3d.rs"), include_str!("../export/material_tab.rs")];
+        let sources = [include_str!("../view3d.rs"), include_str!("../view3d/menus.rs"), include_str!("../export/material_tab.rs")];
         const KEYS: &[&str] = &[
-            "A folder: material.mtlx, material.json, resources/ and the optional preview.png",
-            "Clear material assignments",
+            "Scene",
+            "Materials",
+            "Camera",
+            "Renderer",
+            "Root graph",
+            "Source normals",
+            "Textures",
+            "Resolution",
             "Displacement scale",
+            "Destination",
             "Drop to apply graph outputs",
-            "Environment background",
-            "Exposed parameters",
-            "Exposure",
-            "Flip normal map Y (DirectX)",
-            "Height depth (% of the mesh size)",
-            "Height level (0 = rises out of the surface)",
-            "Include preview.png",
-            "Material",
-            "Normal orientation",
-            "One .mcmat archive: material.mtlx, material.json, resources/ and the optional preview.png",
-            "Publishing arrives with the new .mcmat format (#190); these options are kept for it",
-            "Show alpha channel",
-            "Transparency (alpha)",
-            "Unassigned",
         ];
         for key in KEYS {
             assert!(sources.iter().any(|source| source.contains(&format!("tr({key:?})"))), "not a Native tr() callsite: {key}");
@@ -662,15 +661,14 @@ mod hebrew_library_preview_cache_controls_test {
 
     #[test]
     fn native_preferences_preview_cache_controls_are_hebrew() {
-        let source = include_str!("../windows.rs");
-        const KEYS: &[&str] = &[
-            "Library preview cache",
-            "Disk limit (MiB, 0 = off)",
-            "Maximum stored previews",
-            "Previews rebuild as they come into view.",
-        ];
+        let source = include_str!("../preference/library_page.rs");
+        let heading = include_str!("../preference/mod.rs");
+        assert!(heading.contains("tr(title)"), "Preferences heading no longer translates its title");
+        const KEYS: &[&str] = &["Library preview cache", "Disk limit (MiB, 0 = off)", "Maximum stored previews", "Previews rebuild as they come into view."];
         for key in KEYS {
-            assert!(source.contains(&format!("tr({key:?})")), "not a live Native Preferences key: {key}");
+            let direct = source.contains(&format!("tr({key:?})"));
+            let translated_heading = source.contains(&format!("heading(ui, {key:?})")) && heading.contains("tr(title)");
+            assert!(direct || translated_heading, "not a live translated Native Preferences key: {key}");
             let matches: Vec<_> = TABLE.iter().filter(|(source, _)| source == key).collect();
             assert_eq!(matches.len(), 1, "missing or duplicate Hebrew Preferences key: {key}");
             assert!(matches[0].1.chars().any(|c| ('\u{0590}'..='\u{05ff}').contains(&c)), "translation lacks Hebrew letters: {key}");
@@ -688,16 +686,10 @@ mod hebrew_value_input_editor_tests {
         let source = include_str!("../value_input_editor.rs");
         const KEYS: &[&str] = &["Value inputs", "Remove", "Add value input", "Value type"];
         for key in KEYS {
-            assert!(
-                source.contains(&format!("tr({key:?})")),
-                "missing live Native tr() callsite: {key}"
-            );
+            assert!(source.contains(&format!("tr({key:?})")), "missing live Native tr() callsite: {key}");
             let matches: Vec<_> = TABLE.iter().filter(|(english, _)| english == key).collect();
             assert_eq!(matches.len(), 1, "missing or duplicate Hebrew value-input label: {key}");
-            assert!(
-                matches[0].1.chars().any(|c| ('\u{0590}'..='\u{05ff}').contains(&c)),
-                "not Hebrew: {key}"
-            );
+            assert!(matches[0].1.chars().any(|c| ('\u{0590}'..='\u{05ff}').contains(&c)), "not Hebrew: {key}");
         }
     }
 }
@@ -709,7 +701,10 @@ mod hebrew_native_node_description_tests {
     #[test]
     fn inspector_node_descriptions_are_source_keyed_and_translated() {
         let native_inspector = include_str!("../property/node.rs");
-        assert!(native_inspector.contains("RichText::new(tr(definition.description))"), "Inspector must translate the original node description at presentation only");
+        assert!(
+            native_inspector.contains("RichText::new(tr(definition.description))"),
+            "Inspector must translate the original node description at presentation only"
+        );
         const SOURCE_DESCRIPTIONS: &[&str] = &[
             "Gaussian blur.",
             "Blends a foreground over a background with a blending mode, weighted by opacity and an optional mask.",

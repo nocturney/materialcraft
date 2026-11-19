@@ -32,7 +32,7 @@ pub fn session(session: &Session, requested_graph: Option<usize>) -> J {
                         "error": entry.error, "ms": entry.ms, "cached": entry.cached,
                         "base": entry.base, "baseValues": entry.base_values, "parameters": entry.parameters,
                         "value": entry.outputs.first().and_then(materialcraft_eval::NodeOutput::as_value),
-                        "size": entry.outputs.first().and_then(materialcraft_eval::NodeOutput::as_image).map(|image| [image.w, image.h]),
+                        "size": entry.outputs.first().and_then(materialcraft_eval::NodeOutput::as_image).map(|image| [image.width(), image.height()]),
                         "kind": entry.outputs.first().and_then(materialcraft_eval::NodeOutput::as_image).map(|image| if image.is_gray() { "gray" } else { "color" }),
                         "mean": entry.outputs.first().and_then(materialcraft_eval::NodeOutput::as_image).map(|image| image.mean()),
                     }));
@@ -81,7 +81,7 @@ pub fn session(session: &Session, requested_graph: Option<usize>) -> J {
             "assignments": session.material_preview,
             "channels": session.material_preview.sources(&session.pkg).into_iter().map(|(channel, source)| {
                 let image = session.material_image(&source);
-                json!({"channel": channel, "source": source, "size": image.map(|image| [image.w, image.h]), "mean": image.map(|image| image.mean())})
+                json!({"channel": channel, "source": source, "size": image.map(|image| [image.width(), image.height()]), "mean": image.map(|image| image.mean())})
             }).collect::<Vec<_>>(),
         },
         "previewSize": session.preview_size,

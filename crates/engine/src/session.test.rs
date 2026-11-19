@@ -1,6 +1,6 @@
+use craft_texture::{Image, Kind, resource_key};
 use materialcraft_core::{Package, Resource};
 use materialcraft_formats::{Depth, encode};
-use materialcraft_image::{Image, Kind, resource_key};
 
 use crate::session::Session;
 
@@ -187,13 +187,16 @@ fn a_failed_group_recooks_if_it_cooked_a_temporary_document() {
     s.preview_size = Some(16);
     let id = NodeId(execute(&mut s, "graph.node.add", &json!({"def": "uniform"})).unwrap()["id"].as_u64().unwrap());
     execute(&mut s, "graph.node.param", &json!({"id": id.0, "param": "color_mode", "value": true})).unwrap();
-    let before = s.cook().image(id, 0).unwrap().data.clone();
+    let before = s.cook().image(id, 0).unwrap().data().to_vec();
     let result: crate::Result<()> = s.group("Temporary", |s| {
         execute(s, "graph.node.param", &json!({"id": id.0, "param": "color", "value": [0.1, 0.8, 0.2, 1.0]}))?;
         s.cook();
         Err(crate::EngineError::Other("failed".into()))
     });
+
     assert!(result.is_err());
+
     s.cook_if_dirty();
-    assert_eq!(s.cooked.image(id, 0).unwrap().data, before);
+
+    assert_eq!(s.cooked.image(id, 0).unwrap().data(), before.as_slice());
 }

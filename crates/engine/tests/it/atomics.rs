@@ -59,19 +59,28 @@ fn atomic_sample_round_trips_through_native_fields_and_cooks_identically() {
         assert!(!text.contains(forbidden));
     }
     let read = read_sbs(&bytes, "atomic_sample.sbs", &|_| None).unwrap();
+
     assert!(read.warnings.is_empty(), "{:?}", read.warnings);
+
     let mut loaded = Session::new(read.pkg);
     loaded.preview_size = Some(64);
     loaded.cook();
+
     assert_eq!(original.graph().unwrap().connections.len(), loaded.graph().unwrap().connections.len());
+
     for (before, after) in original.graph().unwrap().nodes.iter().zip(&loaded.graph().unwrap().nodes) {
         assert_eq!(before.def, after.def);
+
         let result = &loaded.cooked.nodes[&after.id];
+
         assert!(result.error.is_none(), "{}: {:?}", after.def, result.error);
+
         match (original.cooked.image(before.id, 0), loaded.cooked.image(after.id, 0)) {
             (Some(before), Some(after)) => {
-                assert_eq!((before.w, before.h, before.kind), (after.w, after.h, after.kind));
-                let error = before.data.iter().zip(after.data.iter()).map(|(a, b)| (a - b).abs()).fold(0.0_f32, f32::max);
+                assert_eq!((before.width(), before.height(), before.kind()), (after.width(), after.height(), after.kind()));
+
+                let error = before.data().iter().zip(after.data()).map(|(a, b)| (a - b).abs()).fold(0.0_f32, f32::max);
+
                 assert!(error < 1e-5, "pixel error {error}");
             }
             (None, None) => assert_eq!(original.cooked.value(before.id, 0), loaded.cooked.value(after.id, 0)),
@@ -170,17 +179,22 @@ fn exposed_parameter_binding_remains_live_after_saving() {
     let mut session = Session::new(atomic_sample().unwrap());
     let blur = session.graph().unwrap().nodes.iter().find(|node| node.def == "blur").unwrap().id;
     execute(&mut session, "graph.exposed.add", &json!({"id": "radius", "bind": {"node": blur.0, "param": "intensity"}})).unwrap();
-    execute(&mut session, "graph.exposed.set", &json!({"id": "radius", "value": 4.0})).unwrap();
+
+    // At the 32-pixel preview, strength 4 covers only the center texel
+    execute(&mut session, "graph.exposed.set", &json!({"id": "radius", "value": 8.0})).unwrap();
     let bytes = write_sbs(&session.pkg).unwrap();
     let loaded = read_sbs(&bytes, "exposed.sbs", &|_| None).unwrap();
+
     assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
+
     let mut loaded = Session::new(loaded.pkg);
     loaded.preview_size = Some(32);
     loaded.cook();
-    let before = loaded.cooked.image(blur, 0).unwrap().data.clone();
+    let before = loaded.cooked.image(blur, 0).unwrap().data().to_vec();
     execute(&mut loaded, "graph.exposed.set", &json!({"id": "radius", "value": 0.0})).unwrap();
     loaded.cook();
-    assert_ne!(before, loaded.cooked.image(blur, 0).unwrap().data);
+
+    assert_ne!(before.as_slice(), loaded.cooked.image(blur, 0).unwrap().data());
 }
 
 #[test]

@@ -345,7 +345,7 @@ fn library_graphs_cook_previews_from_sample_inputs() {
 
     let filter = preview("sbs://blur_hq.sbs", "blur_hq").unwrap();
 
-    assert_eq!((filter.w, filter.h), (32, 32));
+    assert_eq!((filter.width(), filter.height()), (32, 32));
     assert!(preview("sbs://materials/pbr/bricks_001.sbs", "bricks_001").is_some());
     assert!(preview("sbs://noise_bnw_spots_1.sbs", "bnw_spots_1").is_some(), "an FX-Map noise reads the variables its size function sets");
     assert!(preview("sbs://blur_hq.sbs", "no_such_graph").is_none());
@@ -362,7 +362,7 @@ fn repeated_library_previews_release_images_and_source_references() {
             [("sbs://blur_hq.sbs", "blur_hq"), ("sbs://noise_clouds_3_v2.sbs", "clouds_3"), ("sbs://materials/pbr/bricks_001.sbs", "bricks_001")]
         {
             let image = NodeLibrary::preview(&library, package, graph, 72).unwrap_or_else(|| panic!("missing preview {package}#{graph}"));
-            let buffer = Arc::downgrade(&image.data);
+            let buffer = Arc::downgrade(image.shared_data());
             drop(image);
 
             assert!(buffer.upgrade().is_none(), "a completed thumbnail must release its image after upload");

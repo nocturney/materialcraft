@@ -1,6 +1,6 @@
 use crate::{Cache, identifier};
+use craft_texture::Image;
 use materialcraft_core::{Node, Package, Value};
-use materialcraft_image::Image;
 use std::collections::{BTreeMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::{Arc, Mutex};
@@ -8,21 +8,21 @@ use std::sync::{Arc, Mutex};
 const MAX_INPUT_FINGERPRINTS: usize = 128;
 
 pub(crate) fn image_key(image: &Image, cache: &Mutex<Cache>) -> u64 {
-    let buffer_id = Arc::as_ptr(&image.data) as usize;
-    let shape = (image.w, image.h, image.kind.channels());
+    let buffer_id = Arc::as_ptr(image.shared_data()) as usize;
+    let shape = (image.width(), image.height(), image.channels());
     if let Some(key) = cache
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .input_hashes
         .get(&buffer_id)
-        .and_then(|saved| saved.buffer.upgrade().filter(|data| Arc::ptr_eq(data, &image.data) && saved.shape == shape).map(|_| saved.key))
+        .and_then(|saved| saved.buffer.upgrade().filter(|data| Arc::ptr_eq(data, image.shared_data()) && saved.shape == shape).map(|_| saved.key))
     {
-        return key ^ hash_of(&image.integer_sampling);
+        return key ^ hash_of(&image.integer_sampling());
     }
 
     let mut hasher = DefaultHasher::new();
-    (shape, image.data.len()).hash(&mut hasher);
-    for value in image.data.iter() {
+    (shape, image.data().len()).hash(&mut hasher);
+    for value in image.data() {
         value.to_bits().hash(&mut hasher);
     }
 
@@ -35,8 +35,8 @@ pub(crate) fn image_key(image: &Image, cache: &Mutex<Cache>) -> u64 {
         }
     }
 
-    cache.input_hashes.insert(buffer_id, crate::input_fingerprint::InputFingerprint { buffer: Arc::downgrade(&image.data), shape, key });
-    key ^ hash_of(&image.integer_sampling)
+    cache.input_hashes.insert(buffer_id, crate::input_fingerprint::InputFingerprint { buffer: Arc::downgrade(image.shared_data()), shape, key });
+    key ^ hash_of(&image.integer_sampling())
 }
 
 pub(crate) fn hash_of(value: &impl Hash) -> u64 {

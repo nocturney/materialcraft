@@ -37,71 +37,76 @@ pub(crate) fn instances_reach(pkg: &Package, from: usize, target: usize) -> bool
 }
 
 pub(crate) fn cook_instance(
-    pkg: &Package,
-    gi: usize,
+    package: &Package,
+    graph_index: usize,
     node: &Node,
-    in_ports: &[Port],
-    out_ports: &[Port],
+    input_ports: &[Port],
+    output_ports: &[Port],
     inputs: &[Option<&NodeOutput>],
     params: &BTreeMap<String, Value>,
     size: (u32, u32),
     base: crate::resolved_base_parameters::ResolvedBaseParameters,
-    opts: &Options,
+    options: &Options,
     cache: &Mutex<Cache>,
 ) -> Result<Vec<NodeOutput>, String> {
-    if opts.depth >= MAX_DEPTH {
+    if options.depth >= MAX_DEPTH {
         return Err("graph instances nest too deep (does a graph use itself?)".into());
     }
-    let registry = opts.registry.unwrap_or(pkg);
-    let (source, sub_gi, sub) = resolve(registry, pkg, node).ok_or("the instanced graph does not exist")?;
-    let identity = std::ptr::from_ref(sub) as usize;
-    if pkg.graphs.get(gi).is_some_and(|graph| std::ptr::eq(graph, sub)) || opts.graph_stack.contains(&identity) {
-        return Err(format!("graph `{}` uses itself through a graph instance", sub.name));
+
+    let registry = options.registry.unwrap_or(package);
+    let (source, source_graph_index, source_graph) = resolve(registry, package, node).ok_or("the instanced graph does not exist")?;
+    let identity = std::ptr::from_ref(source_graph) as usize;
+    if package.graphs.get(graph_index).is_some_and(|graph| std::ptr::eq(graph, source_graph)) || options.graph_stack.contains(&identity) {
+        return Err(format!("graph `{}` uses itself through a graph instance", source_graph.name));
     }
-    if sub.function.is_some() || !sub.nodes.iter().any(|node| node.def == "output") {
+
+    if source_graph.function.is_some() || !source_graph.nodes.iter().any(|node| node.def == "output") {
         return Err("the referenced graph must be a main graph with an output".into());
     }
-    let root_resource = opts.resource_root.unwrap_or(opts.resource);
+
+    let root_resource = options.resource_root.unwrap_or(options.resource);
     let resource = |name: &str| match &node.instance {
         Some(instance) if !instance.package.is_empty() => {
-            let (name, linear) = materialcraft_image::split_resource_key(name);
-            root_resource(&materialcraft_image::resource_key(&format!("{}\0{name}", instance.package), linear))
+            let (name, linear) = craft_texture::split_resource_key(name);
+            root_resource(&craft_texture::resource_key(&format!("{}\0{name}", instance.package), linear))
         }
-        _ => (opts.resource)(name),
+        _ => (options.resource)(name),
     };
-    let mut o = Options::new(&resource);
-    o.environment = opts.environment;
-    o.parent_tiling = Some(base.tiling);
-    o.parent_pixel_ratio = Some(base.pixel_ratio);
-    o.parent_base = Some(base);
-    o.registry = Some(registry);
-    o.resource_root = Some(root_resource);
-    o.max_size = opts.max_size;
-    o.cancel = opts.cancel;
-    o.depth = opts.depth + 1;
-    o.graph_stack = opts.graph_stack.clone();
-    o.graph_stack.push(identity);
-    o.only = Some(sub.nodes.iter().filter(|node| node.def == "output").map(|node| node.id).collect());
-    o.inputs = in_ports.iter().zip(inputs).filter_map(|(port, input)| Some((port.id.clone(), input.as_ref()?.as_image()?.clone()))).collect();
-    o.overrides = params.iter().filter(|(k, _)| sub.exposed.iter().any(|e| &e.id == *k)).map(|(k, v)| (k.clone(), v.clone())).collect();
-    o.overrides.extend(in_ports.iter().zip(inputs).filter_map(|(port, input)| Some((port.id.clone(), input.as_ref()?.as_value()?.clone()))));
-    let cooked = cook(source, sub_gi, &o, cache);
+    let mut source_options = Options::new(&resource);
+    source_options.environment = options.environment;
+    source_options.parent_tiling = Some(base.tiling);
+    source_options.parent_pixel_ratio = Some(base.pixel_ratio);
+    source_options.parent_base = Some(base);
+    source_options.registry = Some(registry);
+    source_options.resource_root = Some(root_resource);
+    source_options.max_size = options.max_size;
+    source_options.cancel = options.cancel;
+    source_options.depth = options.depth + 1;
+    source_options.graph_stack = options.graph_stack.clone();
+    source_options.graph_stack.push(identity);
+    source_options.only = Some(source_graph.nodes.iter().filter(|node| node.def == "output").map(|node| node.id).collect());
+    source_options.inputs = input_ports.iter().zip(inputs).filter_map(|(port, input)| Some((port.id.clone(), input.as_ref()?.as_image()?.clone()))).collect();
+    source_options.overrides = params.iter().filter(|(k, _)| source_graph.exposed.iter().any(|e| &e.id == *k)).map(|(k, v)| (k.clone(), v.clone())).collect();
+    source_options.overrides.extend(input_ports.iter().zip(inputs).filter_map(|(port, input)| Some((port.id.clone(), input.as_ref()?.as_value()?.clone()))));
+    let cooked = cook(source, source_graph_index, &source_options, cache);
     if cooked.cancelled {
         return Err("cancelled".into());
     }
+
     if let Some(error) = cooked.nodes.values().find_map(|result| result.error.as_deref()) {
-        return Err(format!("{}: {error}", sub.name));
+        return Err(format!("{}: {error}", source_graph.name));
     }
-    out_ports
+
+    output_ports
         .iter()
-        .map(|p| {
-            let output = sub
+        .map(|port| {
+            let output = source_graph
                 .nodes
                 .iter()
-                .find(|n| n.def == "output" && identifier(n) == p.id)
+                .find(|candidate| candidate.def == "output" && identifier(candidate) == port.id)
                 .and_then(|node| cooked.nodes.get(&node.id))
                 .and_then(|result| result.outputs.first())
-                .ok_or_else(|| format!("the source output `{}` is missing", p.id))?;
+                .ok_or_else(|| format!("the source output `{}` is missing", port.id))?;
             Ok(match output {
                 NodeOutput::Image(image) => NodeOutput::Image(image.resize(size.0, size.1, true)),
                 NodeOutput::Value(value) => NodeOutput::Value(value.clone()),

@@ -6,6 +6,8 @@
   <meta name="color-scheme" content="dark">
   <title>MaterialCraft</title>
   <link data-trunk rel="rust" data-bin="materialcraft-web" data-cargo-profile="wasm-release" data-wasm-opt="z" data-weak-refs />
+  <!-- The SBS library's bitmaps ship beside the wasm: embedded, they push it past Cloudflare Pages' 25 MiB file cap -->
+  <link data-trunk rel="copy-dir" href="../../assets/sbs/resources" data-target-path="sbs/resources" />
   <style>
     html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; overscroll-behavior: none; background: #1c1c1c; }
     /* Touch and pen strokes paint and orbit; the browser must not scroll, zoom or select. */

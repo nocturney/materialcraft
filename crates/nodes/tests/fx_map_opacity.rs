@@ -2,7 +2,7 @@ use materialcraft_core::{PatternGraph, PatternNodeKind, Value};
 use materialcraft_nodes::{CookContext, find, resolve_params};
 use std::collections::BTreeMap;
 
-fn render(depth: usize, roughness: f32, stack: bool, color: Option<[f32; 4]>) -> materialcraft_image::Image {
+fn render(depth: usize, roughness: f32, stack: bool, color: Option<[f32; 4]>) -> craft_texture::Image {
     let mut graph = PatternGraph::with_root(PatternNodeKind::Quadrant);
     for index in 0..depth {
         let child = graph.add(PatternNodeKind::Quadrant).unwrap();
@@ -59,7 +59,7 @@ fn quadrant_opacity_matches_measured_depth_and_stack_values() {
         let image = render(depth, roughness, false, None);
 
         assert!(
-            image.data.iter().all(|value| (*value - expected).abs() < 2e-7),
+            image.data().iter().all(|value| (*value - expected).abs() < 2e-7),
             "roughness {roughness}, depth {depth}: {:?}, expected {expected}",
             image.mean()
         );
@@ -68,7 +68,7 @@ fn quadrant_opacity_matches_measured_depth_and_stack_values() {
     for roughness in [0.42, 1.0] {
         let image = render(4, roughness, true, None);
 
-        assert!(image.data.iter().all(|value| (*value - 0.125).abs() < 2e-7), "stack roughness {roughness}: {:?}", image.mean());
+        assert!(image.data().iter().all(|value| (*value - 0.125).abs() < 2e-7), "stack roughness {roughness}: {:?}", image.mean());
     }
 }
 

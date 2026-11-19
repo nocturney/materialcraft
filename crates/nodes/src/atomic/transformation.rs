@@ -1,7 +1,7 @@
 use super::ATOMIC;
 use crate::{CookContext, CookResult, NodeDefinition, node};
+use craft_texture::{Image, Kind};
 use materialcraft_core::OutputFormat;
-use materialcraft_image::{Image, Kind};
 
 pub(super) fn definition() -> NodeDefinition {
     node("transformation", "Transformation 2D", ATOMIC)
@@ -21,8 +21,9 @@ fn transformation(context: &CookContext) -> CookResult {
     let input = context.input(0).cloned().unwrap_or_else(|| Image::filled(context.w, context.h, Kind::Gray, [0.0; 4]));
     let offset = context.v2("offset");
     let matrix = context.v4("matrix");
+    const MIN_DETERMINANT: f32 = 1e-8;
     let determinant = matrix[0] * matrix[3] - matrix[1] * matrix[2];
-    if !determinant.is_finite() || determinant.abs() < 1e-8 {
+    if !determinant.is_finite() || determinant.abs() < MIN_DETERMINANT {
         return Err("transform matrix is singular".into());
     }
 
@@ -33,7 +34,7 @@ fn transformation(context: &CookContext) -> CookResult {
     // Keep independent wrap axes for panoramic images
     let tiling = context.vars.get("$tiling").and_then(materialcraft_core::Value::as_i32).map_or([context.tile; 2], |mask| [mask & 1 != 0, mask & 2 != 0]);
 
-    Ok(vec![Image::generate_uv(context.w, context.h, input.kind, |u, v| {
+    Ok(vec![Image::generate_uv(context.w, context.h, input.kind(), |u, v| {
         let x = u - 0.5;
         let y = v - 0.5;
 
@@ -53,8 +54,8 @@ fn transformation(context: &CookContext) -> CookResult {
 fn nearest_mip(mut input: Image, matrix: [f32; 4], context: &CookContext) -> Image {
     let width = context.w.max(1) as f32;
     let height = context.h.max(1) as f32;
-    let dx = (matrix[0] * input.w as f32 / width).hypot(matrix[1] * input.h as f32 / width);
-    let dy = (matrix[2] * input.w as f32 / height).hypot(matrix[3] * input.h as f32 / height);
+    let dx = (matrix[0] * input.width() as f32 / width).hypot(matrix[1] * input.height() as f32 / width);
+    let dy = (matrix[2] * input.width() as f32 / height).hypot(matrix[3] * input.height() as f32 / height);
 
     // Thirteen reductions cover the maximum supported side of 8192 texels
     let levels = dx.max(dy).max(1.0).log2().round().clamp(0.0, 13.0) as u32;
@@ -65,12 +66,12 @@ fn nearest_mip(mut input: Image, matrix: [f32; 4], context: &CookContext) -> Ima
     };
 
     for _ in 0..levels {
-        if input.w <= 1 && input.h <= 1 {
+        if input.width() <= 1 && input.height() <= 1 {
             break;
         }
 
         // Integer mip levels round four-texel averages halfway up
-        input = Image::generate(input.w.div_ceil(2), input.h.div_ceil(2), input.kind, |x, y| {
+        input = Image::generate(input.width().div_ceil(2), input.height().div_ceil(2), input.kind(), |x, y| {
             let (x, y) = (i64::from(x) * 2, i64::from(y) * 2);
             let pixels = [input.get(x, y, false), input.get(x + 1, y, false), input.get(x, y + 1, false), input.get(x + 1, y + 1, false)];
             std::array::from_fn(|channel| {
@@ -78,7 +79,8 @@ fn nearest_mip(mut input: Image, matrix: [f32; 4], context: &CookContext) -> Ima
                     let sum: u32 = pixels.iter().map(|pixel| (pixel[channel].clamp(0.0, 1.0) * maximum).round() as u32).sum();
                     ((sum + 2) / 4) as f32 / maximum
                 } else {
-                    pixels.iter().map(|pixel| pixel[channel]).sum::<f32>() * 0.25
+                    // Average in f64 so finite HDR texels cannot overflow the sum
+                    (pixels.iter().map(|pixel| f64::from(pixel[channel])).sum::<f64>() * 0.25) as f32
                 }
             })
         });

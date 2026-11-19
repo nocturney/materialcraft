@@ -2,7 +2,6 @@
 resolver = "3"
 members = [
     "crates/core",
-    "crates/image",
     "crates/geom",
     "crates/nodes",
     "crates/eval",
@@ -20,7 +19,6 @@ exclude = ["vendor"]
 # The web app only builds for wasm32 (trunk); everything else is the default.
 default-members = [
     "crates/core",
-    "crates/image",
     "crates/geom",
     "crates/nodes",
     "crates/eval",
@@ -38,22 +36,18 @@ default-members = [
 version = "0.4.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-rust-version = "1.95"
-repository = "https://github.com/storytold/materialcraft"
 
 [workspace.dependencies]
-# Standard Base64 output; strict SBS decoding remains app-local.
-craft-mime = { git = "https://github.com/storytold/craft-libs", rev = "ea24422ae9859dc5da398d0462bc87f8e02e0d10", version = "0.1.0" }
-craft-texture-dds = { package = "craft-texture", version = "0.1.0", git = "https://github.com/storytold/craft-libs", rev = "726ad0f8290bedb6ced60fa06200a6b574f9990d", features = ["dds"] }
-# OBJ and glTF/GLB mesh reading for the 3D view; normalisation, UVs and tangents stay app-local.
-craft-mesh = { version = "0.1.0", git = "https://github.com/storytold/craft-libs", rev = "57288edafdc45552e30481cc649021de446abfa0", default-features = false, features = ["obj", "gltf"] }
-# Shared XML escaping; SBS model and serialization policy stay app-local.
-craft-xml = { version = "0.1.0", git = "https://github.com/storytold/craft-libs", rev = "b6d9feed23ceae249b40593ed84a668343091627" }
-# SVG: bounded parsing (usvg re-exported) and drawing (resvg) behind the shared checks.
-craft-svg = { version = "0.1.0", git = "https://github.com/storytold/craft-libs", rev = "57288edafdc45552e30481cc649021de446abfa0", features = ["tree-render"] }
+# Standard Base64 output; strict SBS decoding remains app-local
+craft-mime = { git = "https://github.com/storytold/craft-libs", rev = "453b0da782ccef39be9a6dac8d27c80b553ef1cc", version = "0.1.0" }
+# Read 3D meshes through craft-mesh; keep mesh processing app-local
+craft-mesh = { version = "0.1.0", git = "https://github.com/storytold/craft-libs", rev = "453b0da782ccef39be9a6dac8d27c80b553ef1cc", default-features = false, features = ["obj", "gltf"] }
+# Shared XML escaping; SBS model and serialization policy stay app-local
+craft-xml = { version = "0.1.0", git = "https://github.com/storytold/craft-libs", rev = "453b0da782ccef39be9a6dac8d27c80b553ef1cc" }
+# Bound SVG parsing and drawing through craft-svg
+craft-svg = { version = "0.1.0", git = "https://github.com/storytold/craft-libs", rev = "453b0da782ccef39be9a6dac8d27c80b553ef1cc", features = ["tree-render"] }
 # internal
 materialcraft-core = { path = "crates/core" }
-materialcraft-image = { path = "crates/image" }
 materialcraft-geom = { path = "crates/geom" }
 materialcraft-nodes = { path = "crates/nodes" }
 materialcraft-eval = { path = "crates/eval" }
@@ -69,7 +63,6 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10" # MIT OR Apache-2.0; stable content keys for persistent previews.
 glam = { version = "0.30", features = ["serde", "bytemuck"] }
-bytemuck = { version = "1", features = ["derive"] }
 rayon = "1"
 log = "0.4"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "tga", "tiff", "exr", "hdr", "bmp", "webp", "gif", "pnm"] }
@@ -77,7 +70,6 @@ dds = { version = "0.2", default-features = false }
 half = "2"
 eframe = { version = "0.37", default-features = false }
 egui = "0.37"
-wgpu = "30"
 rfd = "0.17"
 rustix = { version = "1", default-features = false, features = ["std", "fs", "process"] }
 zip = { version = "2", default-features = false, features = ["deflate"] }
@@ -90,26 +82,31 @@ roxmltree = "0.20"
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 cap-std = "4"
 getrandom = "0.3"
-# Shared Craft egui components (widget palette, icon buttons, panel docking): storytold/craft-libs,
-# MIT OR Apache-2.0, every craft-libs crate pinned to one rev.
+# Shared Craft egui components from storytold/craft-libs
+# MIT OR Apache-2.0
 egui_kittest = "0.37"
-craft-mcmat = { git = "https://github.com/storytold/craft-libs", rev = "828b07f3c9f3f6a2e935087b859016a5e46b1c31" }
-craft-ui = { git = "https://github.com/storytold/craft-libs", rev = "6e03f65bf45181db77ba6229716e6624db9eb25b", features = ["serde"] }
-# Keyboard bindings (chords, dispatch and display text): storytold/craft-libs, MIT OR Apache-2.0.
-craft-keymap = { git = "https://github.com/storytold/craft-libs", rev = "6e03f65bf45181db77ba6229716e6624db9eb25b", features = ["egui"] }
-# Native dialogs that do not block the event loop: storytold/craft-libs, MIT OR Apache-2.0.
-craft-dialogs = { git = "https://github.com/storytold/craft-libs", rev = "6e03f65bf45181db77ba6229716e6624db9eb25b" }
-# The platform quit and the macOS Quit menu item: storytold/craft-libs, MIT OR Apache-2.0.
-craft-quit = { git = "https://github.com/storytold/craft-libs", rev = "6e03f65bf45181db77ba6229716e6624db9eb25b", features = ["egui"] }
-craft-menu = { git = "https://github.com/storytold/craft-libs", rev = "6e03f65bf45181db77ba6229716e6624db9eb25b" }
-# Who draws the window frame, and an app-drawn strip as the title bar: storytold/craft-libs, MIT OR Apache-2.0.
-craft-window = { git = "https://github.com/storytold/craft-libs", rev = "6e03f65bf45181db77ba6229716e6624db9eb25b", features = ["egui"] }
-# Release checks and self-updates for the desktop app: storytold/craft-libs, MIT OR Apache-2.0.
-craft-update = { git = "https://github.com/storytold/craft-libs", rev = "6e03f65bf45181db77ba6229716e6624db9eb25b", features = ["egui"] }
-# Atomic persistence, at the suite's current revision.
-craft-atomic = { git = "https://github.com/storytold/craft-libs", rev = "6e03f65bf45181db77ba6229716e6624db9eb25b" }
-# Parse the optional shared font catalog at build time; the font repository is not a dependency.
-craft-fonts-build = { git = "https://github.com/storytold/craft-libs", rev = "6e03f65bf45181db77ba6229716e6624db9eb25b" }
+craft-materialx = { git = "https://github.com/storytold/craft-libs", rev = "453b0da782ccef39be9a6dac8d27c80b553ef1cc" }
+# MCMAT v3 uses its merged archive revision and the matching ZIP crate
+craft-mcmat = { git = "https://github.com/storytold/craft-libs", rev = "7a7a18cb40ac4cd5fca29c0dc224ac5178d40a89" }
+craft-ui = { git = "https://github.com/storytold/craft-libs", rev = "453b0da782ccef39be9a6dac8d27c80b553ef1cc", features = ["serde"] }
+# Keyboard bindings (chords, dispatch and display text): storytold/craft-libs, MIT OR Apache-2.0
+craft-keymap = { git = "https://github.com/storytold/craft-libs", rev = "453b0da782ccef39be9a6dac8d27c80b553ef1cc", features = ["egui"] }
+# Native dialogs that do not block the event loop: storytold/craft-libs, MIT OR Apache-2.0
+craft-dialogs = { git = "https://github.com/storytold/craft-libs", rev = "453b0da782ccef39be9a6dac8d27c80b553ef1cc" }
+craft-platform = { git = "https://github.com/storytold/craft-libs", rev = "453b0da782ccef39be9a6dac8d27c80b553ef1cc" }
+# The platform quit and the macOS Quit menu item: storytold/craft-libs, MIT OR Apache-2.0
+craft-quit = { git = "https://github.com/storytold/craft-libs", rev = "453b0da782ccef39be9a6dac8d27c80b553ef1cc", features = ["egui"] }
+craft-menu = { git = "https://github.com/storytold/craft-libs", rev = "453b0da782ccef39be9a6dac8d27c80b553ef1cc" }
+# Who draws the window frame, and an app-drawn strip as the title bar: storytold/craft-libs, MIT OR Apache-2.0
+craft-window = { git = "https://github.com/storytold/craft-libs", rev = "453b0da782ccef39be9a6dac8d27c80b553ef1cc", features = ["egui"] }
+# Release checks and self-updates for the desktop app: storytold/craft-libs, MIT OR Apache-2.0
+craft-update = { git = "https://github.com/storytold/craft-libs", rev = "453b0da782ccef39be9a6dac8d27c80b553ef1cc", features = ["egui"] }
+# Atomic persistence, at the suite's current revision
+craft-atomic = { git = "https://github.com/storytold/craft-libs", rev = "453b0da782ccef39be9a6dac8d27c80b553ef1cc" }
+# Parse the optional shared font catalog at build time; the font repository is not a dependency
+craft-fonts-build = { git = "https://github.com/storytold/craft-libs", rev = "453b0da782ccef39be9a6dac8d27c80b553ef1cc" }
+# Float image planes and texture sampling for node cooking: storytold/craft-libs, MIT OR Apache-2.0
+craft-texture = { git = "https://github.com/storytold/craft-libs", rev = "453b0da782ccef39be9a6dac8d27c80b553ef1cc", features = ["parallel"] }
 
 # egui 0.37 and winit: the suite's forks (storytold/egui, storytold/winit), as craft-libs pins them.
 [patch.crates-io]
@@ -166,7 +163,7 @@ strip = "debuginfo"
 opt-level = "s"
 
 # Node cooking and the vector math under it run per pixel.
-[profile.wasm-release.package.materialcraft-image]
+[profile.wasm-release.package.craft-texture]
 opt-level = 3
 [profile.wasm-release.package.materialcraft-nodes]
 opt-level = 3

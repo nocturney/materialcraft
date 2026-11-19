@@ -50,9 +50,9 @@ pub fn show(app: &mut MaterialCraftApp, ui: &mut Ui) {
 
 fn canvas(app: &mut MaterialCraftApp, ui: &mut Ui) {
     let theme = Tokens::get(ui.ctx());
-    let ctx = ui.ctx().clone();
-    let (rect, resp) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
-    crate::widgets::name(&resp, egui::Role::Canvas, "Node graph");
+    let context = ui.ctx().clone();
+    let (rect, response) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
+    crate::widgets::name(&response, egui::Role::Canvas, "Node graph");
     app.graph.view = rect;
     if app.ui.frame_all || app.graph.framed_graph != Some(app.session.graph) {
         app.ui.frame_all = false;
@@ -66,10 +66,10 @@ fn canvas(app: &mut MaterialCraftApp, ui: &mut Ui) {
     // Background and grid
     painter.rect_filled(rect, 0.0, Color32::from_rgb(0x2b, 0x2d, 0x31));
     let mut camera = GraphCamera { origin: rect.min, pan: Vec2::from(app.ui.graph_camera.pan), zoom: app.ui.graph_camera.zoom };
-    camera.zoom_from_input(ui, rect);
+    camera.zoom_from_input(ui, rect, app.ui.prefs.zoom_direction());
     app.ui.graph_camera = camera.state();
     super::grid::paint(&painter, &camera, rect);
-    let pointer = ctx.input(|input| input.pointer.hover_pos());
+    let pointer = context.input(|input| input.pointer.hover_pos());
 
     let show_thumbnails = app.ui.prefs.thumbnails;
     let Ok(graph) = app.session.graph() else { return };
@@ -82,7 +82,6 @@ fn canvas(app: &mut MaterialCraftApp, ui: &mut Ui) {
     };
 
     // Layout every node and its ports
-
     let mut layouts: Vec<NodeLayout> = Vec::with_capacity(graph.nodes.len());
     for node in &graph.nodes {
         let (ins, outs) = materialcraft_engine::eval::ports_with_connections(&app.session.pkg, node, index.incoming(node.id).iter().copied());
@@ -211,24 +210,29 @@ fn canvas(app: &mut MaterialCraftApp, ui: &mut Ui) {
             dot_grabs.push(grab);
         }
 
-        let resp = ui.interact(grab, ui.scope_id().with(("node", node.id.0)), Sense::click_and_drag());
-        crate::widgets::name(&resp, egui::Role::Button, &node_label(node));
+        let response = ui.interact(grab, ui.scope_id().with(("node", node.id.0)), Sense::click_and_drag());
+        crate::widgets::name(&response, egui::Role::Button, &node_label(node));
         if node.def == "dot" {
             node_card::paint_dot(&painter, screen_rect, if selected { theme.accent } else { Color32::from_gray(0xb4) });
         } else {
             node_card::paint(&painter, screen_rect, camera.zoom, &node_label(node), header_color(&node.def));
             let header = node_card::header(screen_rect, camera.zoom);
             let body = node_card::body(screen_rect, camera.zoom);
-            if let Some(r0) = result
-                && let Some(img) = r0.outputs.first().and_then(materialcraft_engine::eval::NodeOutput::as_image)
+            if let Some(node_result) = result
+                && let Some(image) = node_result.outputs.first().and_then(materialcraft_engine::eval::NodeOutput::as_image)
                 && show_thumbnails
                 && !app.graph.thumbnails_cleared
             {
                 let side = body.width().min(body.height()) - 6.0 * camera.zoom;
-                let tr_ = Rect::from_center_size(body.center(), vec2(side, side));
-                node_card::paint_well(&painter, tr_.expand(camera.zoom), camera.zoom);
-                let tex = app.thumbs.node(&ctx, r0.key, 0, img);
-                painter.image(tex, tr_, Rect::from_min_max(Pos2::ZERO, pos2(1.0, 1.0)), if node.disabled { Color32::from_gray(90) } else { Color32::WHITE });
+                let thumbnail_rect = Rect::from_center_size(body.center(), vec2(side, side));
+                node_card::paint_well(&painter, thumbnail_rect.expand(camera.zoom), camera.zoom);
+                let texture = app.thumbs.node(&context, node_result.key, 0, image);
+                painter.image(
+                    texture,
+                    thumbnail_rect,
+                    Rect::from_min_max(Pos2::ZERO, pos2(1.0, 1.0)),
+                    if node.disabled { Color32::from_gray(90) } else { Color32::WHITE },
+                );
             } else if let Some(value) = result.and_then(|result| result.outputs.first()).and_then(materialcraft_engine::eval::NodeOutput::as_value) {
                 node_card::paint_well(&painter, body.shrink(4.0 * camera.zoom), camera.zoom);
                 node_card::paint_symbol(&painter, body, camera.zoom, &super::value_text::value_text(value), theme.text_strong);
@@ -240,25 +244,25 @@ fn canvas(app: &mut MaterialCraftApp, ui: &mut Ui) {
 
             // Footer: size and format
             let footer = Rect::from_min_max(pos2(screen_rect.left(), body.bottom()), screen_rect.max);
-            if let Some(img) = result.and_then(|r| r.outputs.first().and_then(materialcraft_engine::eval::NodeOutput::as_image)) {
+            if let Some(image) = result.and_then(|r| r.outputs.first().and_then(materialcraft_engine::eval::NodeOutput::as_image)) {
                 let bits = result.map_or(graph.format.bits(), |result| result.base.format.bits());
 
-                let format = format!("{}{bits}", if img.is_gray() { "L" } else { "C" });
-                let txt = if let Some(limit) = app.session.preview_size {
+                let format = format!("{}{bits}", if image.is_gray() { "L" } else { "C" });
+                let label_text = if let Some(limit) = app.session.preview_size {
                     let [width, height] = graph.size_px();
-                    resp.clone().on_hover_text(format!(
+                    response.clone().on_hover_text(format!(
                         "{} x {} ({bits}bpc)\n{}: {width} x {height}\n{}: {limit} px\n{}",
-                        img.w,
-                        img.h,
+                        image.width(),
+                        image.height(),
                         tr("Parent size"),
                         tr("Preview limit"),
                         tr("Change Preview size while editing in Edit > Preferences. Exports use each node's configured output size.")
                     ));
-                    format!("{}x{} {}", img.w, img.h, tr("Preview"))
+                    format!("{}x{} {}", image.width(), image.height(), tr("Preview"))
                 } else {
-                    format!("{}x{} - {format}", img.w, img.h)
+                    format!("{}x{} - {format}", image.width(), image.height())
                 };
-                painter.text(footer.center(), Align2::CENTER_CENTER, txt, small.clone(), theme.text_dim);
+                painter.text(footer.center(), Align2::CENTER_CENTER, label_text, small.clone(), theme.text_dim);
             }
             if node.def == "output" {
                 painter.text(header.right_center() - vec2(4.0, 0.0), Align2::RIGHT_CENTER, icon::SIGN_OUT, small.clone(), Color32::WHITE);
@@ -267,7 +271,7 @@ fn canvas(app: &mut MaterialCraftApp, ui: &mut Ui) {
                 Stroke::new(2.0, Color32::from_rgb(0xff, 0x30, 0xd0))
             } else if selected {
                 Stroke::new(2.0, theme.accent)
-            } else if resp.hovered() {
+            } else if response.hovered() {
                 Stroke::new(1.0, Color32::from_gray(0x90))
             } else {
                 Stroke::new(1.0, Color32::from_gray(0x10))
@@ -278,11 +282,11 @@ fn canvas(app: &mut MaterialCraftApp, ui: &mut Ui) {
                 painter.line_segment([screen_rect.left_top(), screen_rect.right_bottom()], Stroke::new(1.5, theme.danger));
             }
             if let Some(e) = error {
-                resp.clone().on_hover_text(e);
+                response.clone().on_hover_text(e);
             }
         }
 
-        node_responses.push((node.id, resp));
+        node_responses.push((node.id, response));
     }
 
     let comment_hits = super::annotation_canvas::comments(app, ui, &graph.comments, &camera);
@@ -318,11 +322,11 @@ fn canvas(app: &mut MaterialCraftApp, ui: &mut Ui) {
     // A wire under a comment is not hit
     let wire_hover = wire_hover.filter(|_| !pointer.is_some_and(|p| comment_hits.iter().any(|(_, r)| r.contains(p))));
     if wire_hover.is_some() {
-        ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
+        context.set_cursor_icon(egui::CursorIcon::PointingHand);
     }
 
     app.graph.inspected_node = super::node_selection::inspected(&app.session.selection, app.graph.inspected_node);
-    super::input::handle(app, ui, &resp, rect, &camera, &node_responses, &frame_hits, &comment_hits, &pin_hits, port_hover, wire_hover);
+    super::input::handle(app, ui, &response, rect, &camera, &node_responses, &frame_hits, &comment_hits, &pin_hits, port_hover, wire_hover);
     app.graph.inspected_node = super::node_selection::inspected(&app.session.selection, app.graph.inspected_node);
 
     // GraphDrag previews

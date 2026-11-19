@@ -15,20 +15,20 @@ pub const BINS: usize = 256;
 const MIN_SPAN: f32 = 0.004;
 
 /// Histograms of an image's values in 0..1, clamped: one for a gray image, else R, G and B
-pub fn histogram(img: &Image) -> Vec<[u32; BINS]> {
-    let channels = if img.kind == Kind::Gray { 1 } else { 3 };
-    let stride = img.kind.channels();
-    let mut h = vec![[0u32; BINS]; channels];
-    for px in img.data.chunks(stride) {
-        for (c, bins) in h.iter_mut().enumerate() {
-            let v = px.get(c).copied().unwrap_or(0.0);
-            let v = if v.is_finite() { v.clamp(0.0, 1.0) } else { 0.0 };
-            if let Some(b) = bins.get_mut(((v * (BINS - 1) as f32).round() as usize).min(BINS - 1)) {
-                *b = b.saturating_add(1);
+pub fn histogram(image: &Image) -> Vec<[u32; BINS]> {
+    let channels = if image.kind() == Kind::Gray { 1 } else { 3 };
+    let stride = image.channels();
+    let mut histograms = vec![[0u32; BINS]; channels];
+    for pixel in image.data().chunks(stride) {
+        for (channel, bins) in histograms.iter_mut().enumerate() {
+            let value = pixel.get(channel).copied().unwrap_or(0.0);
+            let value = if value.is_finite() { value.clamp(0.0, 1.0) } else { 0.0 };
+            if let Some(bin) = bins.get_mut(((value * (BINS - 1) as f32).round() as usize).min(BINS - 1)) {
+                *bin = bin.saturating_add(1);
             }
         }
     }
-    h
+    histograms
 }
 
 /// The bar height scale: the tallest bin away from pure black and white (masks pile up there and would flatten everything else), at least one

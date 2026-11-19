@@ -1,101 +1,125 @@
 //! Image operations shared by many nodes: Gaussian blur, Euclidean distance transform, slopes,
 //! color space helpers and blend modes.
 
-use std::sync::Arc;
-
-use materialcraft_image::{Image, Kind};
+use craft_texture::{Image, Kind, Limits};
 use rayon::prelude::*;
 
 /// Gaussian blur with standard deviation `sigma` (pixels). Small sigmas use a sampled kernel;
 /// larger ones three box passes (a close Gaussian approximation in O(1) per pixel).
-pub fn gaussian(img: &Image, sigma: f32, tile: bool) -> Image {
-    if sigma.is_nan() || sigma <= 0.05 || !sigma.is_finite() {
-        return img.clone();
+pub fn gaussian(image: &Image, sigma: f32, tile: bool) -> Image {
+    const MIN_SIGMA_PIXELS: f32 = 0.05;
+    const BOX_BLUR_MIN_SIGMA_PIXELS: f32 = 3.0;
+    const KERNEL_RADIUS_SIGMAS: f32 = 3.0;
+
+    if sigma.is_nan() || sigma <= MIN_SIGMA_PIXELS || !sigma.is_finite() {
+        return image.clone();
     }
 
-    let sigma = sigma.min(img.w.max(img.h) as f32);
-    if sigma < 3.0 {
-        let r = (sigma * 3.0).ceil() as i64;
-        let k: Vec<f32> = (-r..=r).map(|i| (-(i * i) as f32 / (2.0 * sigma * sigma)).exp()).collect();
-        let s: f32 = k.iter().sum();
-        let k: Vec<f32> = k.iter().map(|v| v / s).collect();
-        let pass = |src: &Image, horizontal: bool| convolve_1d(src, &k, r, horizontal, tile);
-        return pass(&pass(img, true), false);
+    let sigma = sigma.min(image.width().max(image.height()) as f32);
+    if sigma < BOX_BLUR_MIN_SIGMA_PIXELS {
+        let radius = (sigma * KERNEL_RADIUS_SIGMAS).ceil() as i64;
+        let kernel: Vec<f32> = (-radius..=radius).map(|i| (-(i * i) as f32 / (2.0 * sigma * sigma)).exp()).collect();
+        let kernel_sum: f32 = kernel.iter().sum();
+        let kernel: Vec<f32> = kernel.iter().map(|v| v / kernel_sum).collect();
+        let pass = |src: &Image, horizontal: bool| convolve_1d(src, &kernel, radius, horizontal, tile);
+        return pass(&pass(image, true), false);
     }
 
     // Box widths for three passes (Kovesi, "Fast almost-Gaussian filtering")
-    let n = 3.0f32;
-    let wl = ((12.0 * sigma * sigma / n + 1.0).sqrt()).floor() as i64;
-    let wl = if wl % 2 == 0 { wl - 1 } else { wl };
-    let wu = wl + 2;
-    let m = ((12.0 * sigma * sigma - n * (wl * wl) as f32 - 4.0 * n * wl as f32 - 3.0 * n) / (-4.0 * wl as f32 - 4.0)).round() as i64;
-    let mut out = img.clone();
+    let pass_count = 3.0f32;
+    let lower_width = ((12.0 * sigma * sigma / pass_count + 1.0).sqrt()).floor() as i64;
+    let lower_width = if lower_width % 2 == 0 { lower_width - 1 } else { lower_width };
+    let upper_width = lower_width + 2;
+    let lower_passes = ((12.0 * sigma * sigma - pass_count * (lower_width * lower_width) as f32 - 4.0 * pass_count * lower_width as f32 - 3.0 * pass_count)
+        / (-4.0 * lower_width as f32 - 4.0))
+        .round() as i64;
+    let mut output = image.clone();
     for i in 0..3 {
-        let r = (if i < m { wl } else { wu } - 1) / 2;
-        out = box_1d(&box_1d(&out, r.max(0), true, tile), r.max(0), false, tile);
+        let radius = (if i < lower_passes { lower_width } else { upper_width } - 1) / 2;
+        output = box_1d(&box_1d(&output, radius.max(0), true, tile), radius.max(0), false, tile);
     }
 
-    out
+    output
 }
 
-fn convolve_1d(src: &Image, k: &[f32], r: i64, horizontal: bool, tile: bool) -> Image {
-    let c = src.channels();
-    Image::generate(src.w, src.h, src.kind, |x, y| {
-        let mut acc = [0.0f32; 4];
-        for (i, kv) in k.iter().enumerate() {
-            let o = i as i64 - r;
-            let p = if horizontal { src.get(x as i64 + o, y as i64, tile) } else { src.get(x as i64, y as i64 + o, tile) };
-            for ch in 0..c.clamp(1, 4) {
-                acc[ch] += p[ch] * kv;
+/// The default limits, raised to admit `src`, so a pass over an image made with raised limits
+/// returns an image of the same size.
+fn limits_for(src: &Image) -> Limits {
+    let mut limits = Limits::default();
+    limits.max_side = limits.max_side.max(src.width()).max(src.height());
+    limits.max_pixels = limits.max_pixels.max(u64::from(src.width()) * u64::from(src.height()));
+    limits.max_bytes = limits.max_bytes.max(size_of_val(src.data()) as u64);
+    limits
+}
+
+fn convolve_1d(src: &Image, kernel: &[f32], radius: i64, horizontal: bool, tile: bool) -> Image {
+    let channels = src.channels();
+    Image::try_generate(src.width(), src.height(), src.kind(), &limits_for(src), |x, y| {
+        let mut accumulator = [0.0f32; 4];
+        for (i, weight) in kernel.iter().enumerate() {
+            let offset = i as i64 - radius;
+            let pixel = if horizontal { src.get(x as i64 + offset, y as i64, tile) } else { src.get(x as i64, y as i64 + offset, tile) };
+            for channel in 0..channels.clamp(1, 4) {
+                accumulator[channel] += pixel[channel] * weight;
             }
         }
-        if c == 1 { [acc[0], 0.0, 0.0, 0.0] } else { acc }
+        if channels == 1 { [accumulator[0], 0.0, 0.0, 0.0] } else { accumulator }
     })
+    .unwrap_or_else(|_| src.clone())
 }
 
-/// One running-sum box pass of radius `r`.
-fn box_1d(src: &Image, r: i64, horizontal: bool, tile: bool) -> Image {
-    if r <= 0 {
+/// One running-sum box pass of radius `radius`.
+fn box_1d(src: &Image, radius: i64, horizontal: bool, tile: bool) -> Image {
+    if radius <= 0 {
         return src.clone();
     }
 
-    let (w, h) = (src.w as usize, src.h as usize);
-    let c = src.channels();
-    let inv = 1.0 / (2 * r + 1) as f32;
-    let mut data = vec![0.0f32; w * h * c];
+    let (w, h) = (src.width() as usize, src.height() as usize);
+    let channels = src.channels();
+    let inverse_width = 1.0 / (2 * radius + 1) as f64;
+    let mut data = vec![0.0f32; w * h * channels];
     let line_len = if horizontal { w } else { h };
     let lines = if horizontal { h } else { w };
-    let get = |line: usize, i: i64, ch: usize| -> f32 {
+
+    // f64 keeps finite HDR windows from overflowing the running sum
+    let get = |line: usize, i: i64, channel: usize| -> f64 {
         let n = line_len as i64;
         let i = if tile { i.rem_euclid(n) } else { i.clamp(0, n - 1) } as usize;
         let (x, y) = if horizontal { (i, line) } else { (line, i) };
-        src.data.get((y * w + x) * c + ch).copied().unwrap_or(0.0)
+        f64::from(src.data().get((y * w + x) * channels + channel).copied().unwrap_or(0.0))
     };
 
-    let results: Vec<Vec<f32>> = (0..lines)
-        .into_par_iter()
-        .map(|line| {
-            let mut out = vec![0.0f32; line_len * c];
-            for ch in 0..c {
-                let mut sum: f32 = (-r..=r).map(|i| get(line, i, ch)).sum();
-                for i in 0..line_len {
-                    out[i * c + ch] = sum * inv;
-                    sum += get(line, i as i64 + r + 1, ch) - get(line, i as i64 - r, ch);
-                }
+    let fill_line = |line: usize, output: &mut [f32]| {
+        for channel in 0..channels {
+            let mut sum: f64 = (-radius..=radius).map(|i| get(line, i, channel)).sum();
+            for i in 0..line_len {
+                output[i * channels + channel] = (sum * inverse_width) as f32;
+                sum += get(line, i as i64 + radius + 1, channel) - get(line, i as i64 - radius, channel);
             }
+        }
+    };
 
-            out
-        })
-        .collect();
-    for (line, vals) in results.iter().enumerate() {
-        for i in 0..line_len {
-            let (x, y) = if horizontal { (i, line) } else { (line, i) };
-            let dst = (y * w + x) * c;
-            data[dst..dst + c].copy_from_slice(&vals[i * c..i * c + c]);
+    if horizontal {
+        data.par_chunks_mut(w * channels).enumerate().for_each(|(line, output)| fill_line(line, output));
+    } else {
+        let results: Vec<Vec<f32>> = (0..lines)
+            .into_par_iter()
+            .map(|line| {
+                let mut output = vec![0.0f32; line_len * channels];
+                fill_line(line, &mut output);
+                output
+            })
+            .collect();
+        for (line, values) in results.into_iter().enumerate() {
+            for i in 0..line_len {
+                let destination = (i * w + line) * channels;
+                data[destination..destination + channels].copy_from_slice(&values[i * channels..i * channels + channels]);
+            }
         }
     }
 
-    Image { w: src.w, h: src.h, kind: src.kind, integer_sampling: false, data: Arc::new(data) }
+    // A valid source has matching dimensions and data length
+    Image::from_data(src.width(), src.height(), src.kind(), data, &limits_for(src)).unwrap_or_else(|_| src.clone())
 }
 
 /// Squared Euclidean distance (pixels) from every pixel to the nearest pixel where `inside` is
@@ -376,9 +400,10 @@ pub fn blend_px(mode: i32, bg: [f32; 4], fg: [f32; 4], opacity: f32, color_blend
     o
 }
 
-/// A gray image of the output size from per-pixel values.
-pub fn gray_from(w: u32, h: u32, v: Vec<f32>) -> Image {
-    Image { w, h, kind: Kind::Gray, integer_sampling: false, data: Arc::new(v) }
+/// A gray image of the output size from per-pixel values, or an error when the size is out of
+/// range or `v` does not hold one value per pixel.
+pub fn gray_from(w: u32, h: u32, v: Vec<f32>) -> Result<Image, String> {
+    Image::from_data(w, h, Kind::Gray, v, &Limits::default()).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -405,10 +430,49 @@ mod tests {
         let img = Image::gray(32, 32, |x, y| if (x / 4 + y / 4) % 2 == 0 { 1.0 } else { 0.0 });
         for s in [1.0, 6.0] {
             let b = gaussian(&img, s, true);
+
             assert!((b.mean()[0] - img.mean()[0]).abs() < 1e-3, "sigma {s}");
         }
         let flat = gaussian(&Image::filled(8, 8, Kind::Color, [0.2, 0.4, 0.6, 1.0]), 4.0, false);
+
         assert!((flat.get(3, 3, false)[1] - 0.4).abs() < 1e-5);
+    }
+
+    #[test]
+    fn box_blur_of_large_hdr_values_stays_finite() {
+        let value = 0.75 * f32::MAX;
+        let blurred = gaussian(&Image::filled(16, 4, Kind::Gray, [value; 4]), 5.0, true);
+
+        for x in 0..16 {
+            let v = blurred.get(x, 1, false)[0];
+
+            assert!(v.is_finite() && (v / value - 1.0).abs() < 1e-5, "pixel {x} is {v}");
+        }
+    }
+
+    #[test]
+    fn blur_keeps_the_size_and_result_of_an_image_over_the_default_limits() {
+        let w = craft_texture::MAX_SIDE + 1;
+        let mut limits = Limits::default();
+        limits.max_side = w;
+        let values: Vec<f32> = (0..w).map(|x| if (x / 8) % 2 == 0 { 1.0 } else { 0.0 }).collect();
+        let Ok(img) = Image::from_data(w, 1, Kind::Gray, values, &limits) else {
+            panic!("a {w}x1 image fits the raised limits");
+        };
+
+        for sigma in [1.0, 5.0] {
+            let blurred = gaussian(&img, sigma, false);
+
+            assert_eq!((blurred.width(), blurred.height()), (w, 1), "sigma {sigma}");
+            assert_ne!(blurred.data(), img.data(), "sigma {sigma} left the pixels unchanged");
+        }
+    }
+
+    #[test]
+    fn gray_from_rejects_an_empty_size_and_a_wrong_value_count() {
+        assert!(gray_from(0, 4, Vec::new()).is_err());
+        assert!(gray_from(2, 2, vec![0.0; 3]).is_err());
+        assert_eq!(gray_from(2, 2, vec![0.5; 4]).map(|image| image.mean()[0]), Ok(0.5));
     }
 
     #[test]

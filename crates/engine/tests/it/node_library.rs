@@ -23,8 +23,8 @@ fn bundled_cloud_and_white_noise_parameter_scopes_cook() {
 
         for node in nodes.iter().filter(|node| matches!(node.def.as_str(), "output" | "fx_map")) {
             let image = cooked.image(node.id, 0).unwrap();
-            let low = image.data.iter().copied().fold(f32::INFINITY, f32::min);
-            let high = image.data.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+            let low = image.data().iter().copied().fold(f32::INFINITY, f32::min);
+            let high = image.data().iter().copied().fold(f32::NEG_INFINITY, f32::max);
 
             assert!(high - low > 0.05, "{file} lost variation: {low}..{high}");
         }
@@ -51,14 +51,14 @@ fn bundled_brick_material_cooks_without_missing_functions_or_budget_errors() {
     for output in outputs {
         let image = cooked.image(output, 0).unwrap();
 
-        assert!(image.data.iter().all(|value| value.is_finite()));
+        assert!(image.data().iter().all(|value| value.is_finite()));
     }
 
     // Finite output alone missed flat noise, identical tile values and a half-turn hue error
     for id in [24, 34, 48, 91] {
         let image = cooked.image(materialcraft_engine::core::NodeId(id), 0).unwrap();
-        let low = image.data.iter().copied().fold(f32::INFINITY, f32::min);
-        let high = image.data.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+        let low = image.data().iter().copied().fold(f32::INFINITY, f32::min);
+        let high = image.data().iter().copied().fold(f32::NEG_INFINITY, f32::max);
 
         assert!(high - low > 0.05, "node {id} lost its variation: {low}..{high}");
 

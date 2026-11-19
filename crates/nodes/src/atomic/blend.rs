@@ -2,7 +2,7 @@ use super::ATOMIC;
 use crate::ops;
 use crate::ops::BLEND_MODES;
 use crate::{CookContext, CookResult, NodeDefinition, node};
-use materialcraft_image::{Image, Kind};
+use craft_texture::{Image, Kind};
 
 pub(super) fn definition() -> NodeDefinition {
     node("blend", "Blend", ATOMIC)
@@ -21,19 +21,19 @@ pub(super) fn definition() -> NodeDefinition {
 }
 
 fn blend(context: &CookContext) -> CookResult {
-    let (fg, bg) = (context.sized(0), context.sized(1));
-    let kind = if [&fg, &bg].iter().any(|i| i.as_ref().is_some_and(|i| !i.is_gray())) { Kind::Color } else { Kind::Gray };
-    let fg = fg.unwrap_or_else(|| Image::filled(context.w, context.h, kind, [0.0, 0.0, 0.0, 0.0]));
-    let bg = bg.unwrap_or_else(|| Image::filled(context.w, context.h, kind, [0.0, 0.0, 0.0, 1.0]));
+    let (foreground, background) = (context.sized(0), context.sized(1));
+    let kind = if [&foreground, &background].iter().any(|i| i.as_ref().is_some_and(|i| !i.is_gray())) { Kind::Color } else { Kind::Gray };
+    let foreground = foreground.unwrap_or_else(|| Image::filled(context.w, context.h, kind, [0.0, 0.0, 0.0, 0.0]));
+    let background = background.unwrap_or_else(|| Image::filled(context.w, context.h, kind, [0.0, 0.0, 0.0, 1.0]));
     let mask = context.sized(2).map(|m| m.to_gray());
-    let (mode, op) = (context.i("mode"), context.f("opacity"));
+    let (mode, opacity) = (context.i("mode"), context.f("opacity"));
     let color_blending = context.i("color_blending");
-    let blend_alpha = context.b("alpha") && !fg.is_gray();
+    let blend_alpha = context.b("alpha") && !foreground.is_gray();
     let clamp =
         matches!(context.format, materialcraft_core::OutputFormat::U8 | materialcraft_core::OutputFormat::U16 | materialcraft_core::OutputFormat::Inherit);
     Ok(vec![Image::generate(context.w, context.h, kind, |x, y| {
         let (x, y) = (x as i64, y as i64);
         let m = mask.as_ref().map_or(1.0, |m| m.get_gray(x, y, false));
-        ops::blend_px(mode, bg.get(x, y, false), fg.get(x, y, false), op * m, color_blending, blend_alpha, clamp)
+        ops::blend_px(mode, background.get(x, y, false), foreground.get(x, y, false), opacity * m, color_blending, blend_alpha, clamp)
     })])
 }

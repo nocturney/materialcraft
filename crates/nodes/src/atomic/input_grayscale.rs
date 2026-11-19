@@ -1,7 +1,7 @@
 use super::GRAPH_ITEMS;
 use crate::{CookContext, CookResult, NodeDefinition, node};
+use craft_texture::{Image, Kind};
 use materialcraft_core::ComponentUsage;
-use materialcraft_image::{Image, Kind};
 
 pub(super) fn definition() -> NodeDefinition {
     node("input_grayscale", "Input grayscale", GRAPH_ITEMS)

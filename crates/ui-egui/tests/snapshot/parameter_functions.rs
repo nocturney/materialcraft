@@ -4,6 +4,16 @@ use materialcraft_engine::core::{BaseParameter, NodeId};
 use materialcraft_ui_egui::{MaterialCraftApp, UiState};
 use serde_json::json;
 
+fn wait_for_cook(harness: &mut egui_kittest::Harness<'static, MaterialCraftApp>) {
+    // Cook errors can move Properties controls before a queued pointer click
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while (harness.state().cooker.busy() || harness.state().session.dirty) && std::time::Instant::now() < deadline {
+        settle(harness, 1);
+    }
+
+    assert!(!harness.state().cooker.busy() && !harness.state().session.dirty, "the parameter preview cook must complete");
+}
+
 #[test]
 #[ignore = "requires an offscreen GPU; run explicitly with --ignored"]
 fn parameter_functions_create_edit_reset_and_return_to_the_owner() {
@@ -14,6 +24,7 @@ fn parameter_functions_create_edit_reset_and_return_to_the_owner() {
     let owner = NodeId(app.run("graph.node.add", json!({"def": "directional_blur"})).unwrap()["id"].as_u64().unwrap());
     let mut harness = harness(app, 1600.0, 1100.0);
     settle(&mut harness, 8);
+    wait_for_cook(&mut harness);
     let button = |label| By::new().role(egui::accesskit::Role::Button).label(label);
     for parameter in BaseParameter::ALL {
         let label = format!("Parameter actions: {}", parameter.label());
@@ -34,6 +45,7 @@ fn parameter_functions_create_edit_reset_and_return_to_the_owner() {
     save(&mut harness, &directory, "parameter-function-menu");
     harness.get(button("Empty function")).click();
     settle(&mut harness, 5);
+    wait_for_cook(&mut harness);
 
     assert!(harness.state().session.graph().unwrap().node(owner).unwrap().base.functions[&BaseParameter::OutputSize].nodes.is_empty());
     assert_eq!(harness.state().function_editor.as_ref().unwrap().node, Some(owner));
@@ -68,12 +80,14 @@ fn parameter_functions_create_edit_reset_and_return_to_the_owner() {
     settle(&mut harness, 8);
     harness.get(button("Reset to default")).click();
     settle(&mut harness, 8);
+    wait_for_cook(&mut harness);
     harness.get(button("Parameter actions: Output size")).click();
     settle(&mut harness, 8);
     save(&mut harness, &directory, "parameter-after-reset-menu");
     assert!(harness.query(button("Constant value")).is_some(), "the reset parameter menu must offer a constant");
     harness.get(button("Constant value")).click();
     settle(&mut harness, 4);
+    wait_for_cook(&mut harness);
 
     let function = &harness.state().session.graph().unwrap().node(owner).unwrap().base.functions[&BaseParameter::OutputSize];
     assert_eq!(function.nodes.len(), 1);
@@ -93,6 +107,7 @@ fn parameter_functions_create_edit_reset_and_return_to_the_owner() {
     settle(&mut harness, 3);
     harness.get(button("Constant value")).click();
     settle(&mut harness, 4);
+    wait_for_cook(&mut harness);
     assert!(harness.query(By::new().label("Expected output: Float")).is_some());
     assert!(harness.state().session.graph().unwrap().node(owner).unwrap().functions.contains_key("angle"));
     save(&mut harness, &directory, "parameter-specific-function");

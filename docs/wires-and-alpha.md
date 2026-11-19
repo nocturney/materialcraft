@@ -86,11 +86,11 @@ session.
 
 ## Alpha in the 3D view
 
-The 3D view reads OpenGL normal maps by default, matching the Normal node's default format.
-For a DirectX normal map, enable **Display ▸ Flip normal map Y (DirectX)**, or run
-`view.3d {"normalYFlip": true}`. Choose the corresponding format in the Normal node's properties.
+The 3D view reads DirectX normal maps by default, matching the Normal node's default format.
+For an OpenGL normal map, disable **Display ▸ Flip normal map Y (DirectX)**, or run
+`view.3d {"normalYFlip": false}`. Choose the corresponding format in the Normal node's properties.
 The setting affects both the interactive view and headless renders, appears as `view3d.normalYFlip`
-in `session.inspect`, and returns to OpenGL when the scene is reset.
+in `session.inspect`, and returns to DirectX when the scene is reset.
 
 <p align="center">
   <img src="images/materialcraft-alpha-channel.png" alt="The same sphere in the alpha channel view: the opaque grid lines are white and the clear gaps black" width="100%">

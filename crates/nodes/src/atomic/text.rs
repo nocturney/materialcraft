@@ -118,9 +118,9 @@ pub(super) fn definition() -> NodeDefinition {
         .any_in("background", "Background")
         .boolean("color_mode", "Color output", false)
         .color("background", "Background color", [0.0, 0.0, 0.0, 1.0])
-        .text("text", "Text", "MaterialCraft")
+        .text("text", "Text", "")
         .text("fontdata", "Font reference", "")
-        .float("fontsize", "Font size", 0.09, 0.0, 1.0)
+        .float("fontsize", "Font size", 0.25, 0.0, 1.0)
         .float2("position", "Position", [0.0; 2], -1.0, 1.0)
         .float4("matrix", "Transform matrix", [1.0, 0.0, 0.0, 1.0], -10.0, 10.0)
         .choice("alignment", "Alignment", &["Left", "Center", "Right"], 1)
@@ -205,7 +205,7 @@ mod tests {
     #[test]
     fn renders_material_craft() {
         let def = find("text").unwrap();
-        let p = resolve_params(def, &BTreeMap::new());
+        let p = resolve_params(def, &BTreeMap::from([("text".into(), materialcraft_core::Value::Text("MaterialCraft".into()))]));
         let no_res = |_: &str| None;
         let vars = BTreeMap::new();
         let context = CookContext {
@@ -221,7 +221,7 @@ mod tests {
         };
 
         let img = &text(&context).unwrap()[0];
-        let lit = img.data.iter().filter(|value| **value > 0.5).count();
+        let lit = img.data().iter().filter(|value| **value > 0.5).count();
 
         assert!(lit > 300, "{lit} pixels");
 

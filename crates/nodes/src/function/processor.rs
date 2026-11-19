@@ -1,9 +1,8 @@
 use super::{EvaluationContext, EvaluationState, compile};
 use crate::{CookContext, CookResult};
+use craft_texture::{Image, Kind, Limits};
 use materialcraft_core::Value;
-use materialcraft_image::{Image, Kind};
 use rayon::prelude::*;
-use std::sync::Arc;
 
 fn pixel(value: Value, gray: bool, format: materialcraft_core::OutputFormat) -> Result<[f32; 4], String> {
     let values = super::value_type::floats(&value)?;
@@ -41,7 +40,7 @@ pub(crate) fn pixel_processor(context: &CookContext) -> CookResult {
     let gray = !context.b("color_mode");
     let kind = if gray { Kind::Gray } else { Kind::Color };
 
-    let (width, height) = materialcraft_image::clamp_size(context.w, context.h);
+    let (width, height) = craft_texture::clamp_size(context.w, context.h);
     let channels = kind.channels();
     let mut data = vec![0.0; width as usize * height as usize * channels];
     data.par_chunks_mut(width as usize * channels).enumerate().try_for_each_init(EvaluationState::default, |state, (y, row)| -> Result<(), String> {
@@ -61,5 +60,5 @@ pub(crate) fn pixel_processor(context: &CookContext) -> CookResult {
 
         Ok(())
     })?;
-    Ok(vec![Image { w: width, h: height, kind, integer_sampling: false, data: Arc::new(data) }])
+    Ok(vec![Image::from_data(width, height, kind, data, &Limits::default()).map_err(|e| e.to_string())?])
 }

@@ -1,7 +1,7 @@
 use super::ATOMIC;
 use crate::{CookContext, CookResult, NodeDefinition, node};
+use craft_texture::{Kind, luminance};
 use materialcraft_core::{Gradient, OutputFormat};
-use materialcraft_image::{Kind, luminance};
 
 pub(super) fn definition() -> NodeDefinition {
     node("gradient_map", "Gradient map", ATOMIC)
@@ -28,7 +28,7 @@ fn gradient_map(context: &CookContext) -> CookResult {
     Ok(vec![if gray { input.map(Kind::Gray, |p| [luminance(look(p[0])), 0.0, 0.0, 0.0]) } else { input.map(Kind::Color, |p| look(p[0])) }])
 }
 
-fn integer_map(input: &materialcraft_image::Image, mut gradient: Gradient, gray: bool) -> materialcraft_image::Image {
+fn integer_map(input: &craft_texture::Image, mut gradient: Gradient, gray: bool) -> craft_texture::Image {
     // The 16-bit path evaluates a 256-entry table in integer position space
     // Coarse nearest sampling shifts transitions and downstream noise octaves
     for key in &mut gradient.keys {

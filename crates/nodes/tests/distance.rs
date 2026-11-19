@@ -1,13 +1,13 @@
 use std::collections::BTreeMap;
 
+use craft_texture::{Image, Kind};
 use materialcraft_core::Value;
-use materialcraft_image::{Image, Kind};
 use materialcraft_nodes::{CookContext, find, resolve_params};
 
 fn cook(mask: Image, source: Option<Image>, tile: bool, combine: bool, distance: f32) -> Image {
     let def = find("distance").unwrap();
     let params = resolve_params(def, &BTreeMap::from([("distance".into(), Value::Float(distance)), ("combine".into(), Value::Bool(combine))]));
-    let (w, h) = (mask.w, mask.h);
+    let (w, h) = (mask.width(), mask.height());
     let inputs = [Some(mask), source];
     let vars = BTreeMap::new();
     let resource = |_: &str| None;
@@ -23,7 +23,7 @@ fn tiled_distance_spreads_source_across_stationary_gradient() {
 
     // A zero slope at the only mask pixel must not stop the walk on background
     assert_eq!(output.get_gray(16, 16, false), 1.0);
-    assert!(output.data.iter().all(|&v| v == 1.0));
+    assert!(output.data().iter().all(|&v| v == 1.0));
 }
 
 #[test]
@@ -55,11 +55,14 @@ fn distance_handles_empty_full_masks_and_no_source() {
         let empty = Image::filled(7, 5, Kind::Gray, [0.0; 4]);
         let full = Image::filled(7, 5, Kind::Gray, [1.0; 4]);
         let source = Image::generate(7, 5, Kind::Color, |x, y| [x as f32 / 7.0, y as f32 / 5.0, 0.4, 0.7]);
-        assert!(cook(empty.clone(), Some(source.clone()), tile, false, 256.0).data.iter().all(|&v| v == 0.0));
+
+        assert!(cook(empty.clone(), Some(source.clone()), tile, false, 256.0).data().iter().all(|&v| v == 0.0));
         assert_eq!(cook(full, Some(source), tile, true, 256.0).get(3, 2, false), [3.0 / 7.0, 2.0 / 5.0, 0.4, 0.7]);
-        assert!(cook(empty, None, tile, true, 256.0).data.iter().all(|&v| v == 0.0));
+        assert!(cook(empty, None, tile, true, 256.0).data().iter().all(|&v| v == 0.0));
+
         let mask = Image::gray(7, 5, |x, y| if x == 0 && y == 0 { 1.0 } else { 0.0 });
         let ramp = cook(mask, None, tile, false, 512.0 / 7.0);
+
         assert_eq!(ramp.get_gray(0, 0, false), 1.0);
         assert_eq!(ramp.get_gray(1, 0, false), 0.5);
         assert_eq!(ramp.get_gray(3, 0, false), 0.0);

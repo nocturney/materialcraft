@@ -101,10 +101,13 @@ fn unique_export_writes_both_maps_with_their_expected_pixels() {
     let (mut s, _) = session();
     let dir = TempDir::new("unique");
     let result = execute(&mut s, "file.export", &json!({"dir": dir.0, "pattern": "$(identifier)"})).unwrap();
+
     assert_eq!(result["files"].as_array().unwrap().len(), 2);
+
     for (name, value) in [("first.png", 0.2), ("second.png", 0.8)] {
         let image = formats::decode(&std::fs::read(dir.0.join(name)).unwrap(), false).unwrap();
-        assert_eq!((image.w, image.h), (16, 16));
+
+        assert_eq!((image.width(), image.height()), (16, 16));
         assert!((image.get(0, 0, false)[0] - value).abs() < 0.001, "{name}");
     }
 }

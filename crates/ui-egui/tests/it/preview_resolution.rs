@@ -48,27 +48,33 @@ fn painted(h: &Harness<'static, MaterialCraftApp>) -> Vec<String> {
 fn node_resolution_explains_the_preview_cap() {
     let (mut h, id) = harness(512, false);
     let img = h.state().session.cooked.image(id, 0).unwrap();
-    assert_eq!((img.w, img.h), (512, 512));
+
+    assert_eq!((img.width(), img.height()), (512, 512));
     assert_eq!(h.state().session.graph().unwrap().size, [10, 10]);
     assert!(painted(&h).iter().any(|t| t == "512x512 Preview"), "missing preview label: {:?}", painted(&h));
+
     let rect = h.state().graph.rects.iter().find(|(n, _)| *n == id).unwrap().1;
     h.event(Event::PointerMoved(rect.center()));
     h.run_steps(90);
     let text = painted(&h).join("\n");
+
     assert!(text.contains("Parent size: 1024 x 1024"), "{text}");
     assert!(text.contains("Preview limit: 512 px"), "{text}");
     assert!(text.contains("Edit > Preferences"), "{text}");
     assert!(text.contains("16bpc"), "format information lost: {text}");
+
     let full = h.state().session.cook_full(0);
     let img = full.image(id, 0).unwrap();
-    assert_eq!((img.w, img.h), (1024, 1024));
+
+    assert_eq!((img.width(), img.height()), (1024, 1024));
 }
 
 #[test]
 fn full_size_mode_retains_the_resolution_and_format() {
     let (h, id) = harness(0, false);
     let img = h.state().session.cooked.image(id, 0).unwrap();
-    assert_eq!((img.w, img.h), (1024, 1024));
+
+    assert_eq!((img.width(), img.height()), (1024, 1024));
     assert!(painted(&h).iter().any(|t| t == "1024x1024 - C16"), "{:?}", painted(&h));
     assert!(!painted(&h).iter().any(|t| t == "1024x1024 Preview"));
 }

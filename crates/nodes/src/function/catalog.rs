@@ -100,10 +100,10 @@ pub fn default_value(id: &str) -> Option<Value> {
 
     Some(match id {
         "const_bool" => Value::Bool(false),
-        "const_float1" => Value::Float(0.5),
+        "const_float1" => Value::Float(0.0),
         "const_float2" => Value::Float2([0.0; 2]),
         "const_float3" => Value::Float3([0.0; 3]),
-        "const_float4" => Value::Float4([0.0, 0.0, 0.0, 1.0]),
+        "const_float4" => Value::Float4([0.0; 4]),
         "const_int1" => Value::Int(0),
         "const_int2" => Value::Int2([0; 2]),
         "const_int3" => Value::Int3([0; 3]),
@@ -114,7 +114,7 @@ pub fn default_value(id: &str) -> Option<Value> {
         "swizzle3" | "iswizzle3" => Value::Int3([0, 1, 2]),
         "swizzle4" | "iswizzle4" => Value::Int4([0, 1, 2, 3]),
         "samplecol" | "samplelum" => Value::Int2([0, 0]),
-        "while" => Value::Int(100),
+        "while" => Value::Int(super::DEFAULT_LOOP_LIMIT),
         _ => return None,
     })
 }

@@ -1,5 +1,5 @@
+use craft_texture::Image;
 use materialcraft_core::Value;
-use materialcraft_image::Image;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum NodeOutput {
@@ -24,7 +24,7 @@ impl NodeOutput {
 
     pub(crate) fn memory_bytes(&self) -> usize {
         match self {
-            Self::Image(image) => image.data.len().saturating_mul(size_of::<f32>()),
+            Self::Image(image) => image.data().len().saturating_mul(size_of::<f32>()),
             Self::Value(Value::Text(text)) => size_of::<Value>().saturating_add(text.len()),
             Self::Value(_) => size_of::<Value>(),
         }

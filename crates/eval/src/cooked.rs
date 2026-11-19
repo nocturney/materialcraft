@@ -1,6 +1,6 @@
 use crate::NodeResult;
+use craft_texture::Image;
 use materialcraft_core::NodeId;
-use materialcraft_image::Image;
 use std::collections::BTreeMap;
 
 /// Results of a cook, by node

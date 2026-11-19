@@ -152,11 +152,11 @@ fn library_art_is_decodable_without_reading_source_assets() {
         let bytes = resources::load(key).unwrap();
         let image = materialcraft_formats::decode(&bytes, true).unwrap();
 
-        assert!(image.w > 0 && image.h > 0);
-        assert!(image.data.iter().all(|value| value.is_finite()));
+        assert!(image.width() > 0 && image.height() > 0);
+        assert!(image.data().iter().all(|value| value.is_finite()));
 
-        let min = image.data.iter().copied().fold(f32::INFINITY, f32::min);
-        let max = image.data.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+        let min = image.data().iter().copied().fold(f32::INFINITY, f32::min);
+        let max = image.data().iter().copied().fold(f32::NEG_INFINITY, f32::max);
 
         assert!(max > min, "constant replacement {key}");
     }

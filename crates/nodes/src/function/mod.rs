@@ -5,6 +5,9 @@
 const MAX_EXPANDED_NODES: usize = 131_072;
 const MAX_CALL_DEPTH: usize = 16;
 
+// Keep absent loop limits aligned with fresh-node defaults
+const DEFAULT_LOOP_LIMIT: i32 = 32;
+
 mod arithmetic;
 mod catalog;
 mod compile;
@@ -24,6 +27,10 @@ mod processor;
 mod program;
 mod resolve_instances;
 mod system_variable;
+mod unconnected_input;
+#[cfg(test)]
+#[path = "unconnected.test.rs"]
+mod unconnected_tests;
 pub mod value_type;
 mod vector;
 mod warnings;

@@ -169,7 +169,7 @@ impl Program {
                 }
                 LoopCondition { instruction: index, iteration, last } => {
                     let exit = value_type::boolean(&state.values.pop().ok_or("missing loop condition")?)?;
-                    let maximum = self.instruction(index)?.value.as_ref().and_then(Value::as_i32).unwrap_or(100);
+                    let maximum = self.instruction(index)?.value.as_ref().and_then(Value::as_i32).unwrap_or(super::DEFAULT_LOOP_LIMIT);
                     if exit || (maximum >= 0 && iteration >= maximum as u32) {
                         state.values.push(last);
                     } else {

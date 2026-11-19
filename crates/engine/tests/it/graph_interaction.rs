@@ -131,6 +131,7 @@ fn fx_map_starts_with_a_quadrant_and_grows_image_inputs_as_connected() {
     let mut session = new_session();
     session.preview_size = Some(16);
     let source = add(&mut session, "uniform");
+    execute(&mut session, "graph.node.param", &json!({"id": source.0, "param": "color", "value": [0.5, 0.5, 0.5, 1.0]})).unwrap();
     execute(&mut session, "graph.node.param", &json!({"id": source.0, "param": "color_mode", "value": false})).unwrap();
     let owner = add(&mut session, "fx_map");
     let Value::PatternGraph(pattern) = &session.graph().unwrap().node(owner).unwrap().params["pattern"] else { panic!("missing default pattern") };
@@ -204,24 +205,32 @@ fn terminal_outputs_cook_and_round_trip_without_source_pins() {
     let mut session = new_session();
     session.preview_size = Some(16);
     let source = add(&mut session, "uniform");
+    execute(&mut session, "graph.node.param", &json!({"id": source.0, "param": "color", "value": [0.5, 0.5, 0.5, 1.0]})).unwrap();
     let output = add(&mut session, "output");
     execute(&mut session, "graph.connect", &json!({"from": source.0, "to": output.0})).unwrap();
+
     assert_eq!(session.input_ports(output), vec!["input"]);
     assert!(session.output_ports(output).is_empty());
+
     let before = session.pkg.clone();
+
     assert!(execute(&mut session, "graph.connect", &json!({"from": output.0, "to": source.0})).is_err());
     assert_eq!(session.pkg, before);
 
     let read = read_sbs(&write_sbs(&session.pkg).unwrap(), "terminal_output.sbs", &|_| None).unwrap();
+
     assert!(read.warnings.is_empty(), "{:?}", read.warnings);
+
     let mut loaded = Session::new(read.pkg);
     loaded.preview_size = Some(16);
     loaded.cook();
     let output = loaded.graph().unwrap().nodes.iter().find(|node| node.def == "output").unwrap().id;
+
     assert!(loaded.output_ports(output).is_empty());
     assert!(loaded.cooked.nodes[&output].error.is_none());
     assert!((loaded.cooked.image(output, 0).unwrap().mean()[0] - 0.5).abs() < 1e-5);
     execute(&mut loaded, "view.2d", &json!({"node": output.0})).unwrap();
+
     assert_eq!(loaded.view2d_image().unwrap().0, output);
 }
 
@@ -234,6 +243,7 @@ fn processors_sample_dynamic_image_inputs_after_sbs_round_trip() {
         session.graph_mut().unwrap().format = materialcraft_engine::core::OutputFormat::F32;
         session.preview_size = Some(16);
         let source = add(&mut session, "uniform");
+        execute(&mut session, "graph.node.param", &json!({"id": source.0, "param": "color", "value": [0.5, 0.5, 0.5, 1.0]})).unwrap();
         let processor = add(&mut session, definition);
         for index in 0..6 {
             execute(&mut session, "graph.connect", &json!({"from": source.0, "to": processor.0, "toPort": format!("input{index}")})).unwrap();
@@ -273,8 +283,10 @@ fn processors_sample_dynamic_image_inputs_after_sbs_round_trip() {
 fn background_pins_preserve_connected_images_through_sbs() {
     let mut session = new_session();
     session.preview_size = Some(16);
-    let source = add(&mut session, "uniform");
     for definition in ["text", "svg"] {
+        let source = add(&mut session, "uniform");
+        execute(&mut session, "graph.node.param", &json!({"id": source.0, "param": "color", "value": [0.5, 0.5, 0.5, 1.0]})).unwrap();
+        execute(&mut session, "graph.node.param", &json!({"id": source.0, "param": "color_mode", "value": definition == "svg"})).unwrap();
         let target = add(&mut session, definition);
         if definition == "text" {
             execute(&mut session, "graph.node.param", &json!({"id": target.0, "param": "text", "value": ""})).unwrap();
@@ -283,13 +295,16 @@ fn background_pins_preserve_connected_images_through_sbs() {
     }
 
     let read = read_sbs(&write_sbs(&session.pkg).unwrap(), "backgrounds.sbs", &|_| None).unwrap();
+
     assert!(read.warnings.is_empty(), "{:?}", read.warnings);
+
     let mut loaded = Session::new(read.pkg);
     loaded.preview_size = Some(16);
     loaded.cook();
     for node in loaded.graph().unwrap().nodes.iter().filter(|node| matches!(node.def.as_str(), "text" | "svg")) {
-        assert_eq!(loaded.input_ports(node.id), vec!["background"]);
         let image = loaded.cooked.image(node.id, 0).unwrap();
+
+        assert_eq!(loaded.input_ports(node.id), vec!["background"]);
         assert_eq!(image.is_gray(), node.def == "text");
         assert!((image.mean()[0] - 0.5).abs() < 1e-5);
         assert!(loaded.cooked.nodes[&node.id].error.is_none());

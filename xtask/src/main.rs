@@ -115,7 +115,6 @@ fn cmd_layers() -> Result<(), String> {
 /// Packages that must build for wasm32-unknown-unknown, in dependency order.
 const WASM_PACKAGES: &[&str] = &[
     "materialcraft-core",
-    "materialcraft-image",
     "materialcraft-geom",
     "materialcraft-nodes",
     "materialcraft-eval",

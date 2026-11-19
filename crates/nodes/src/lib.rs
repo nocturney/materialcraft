@@ -33,7 +33,7 @@ pub use parameter_descriptor::ParameterDescriptor;
 pub use port_definition::PortDefinition;
 pub use port_kind::PortKind;
 
-pub type CookResult = Result<Vec<materialcraft_image::Image>, String>;
+pub type CookResult = Result<Vec<craft_texture::Image>, String>;
 pub type Cook = fn(&CookContext<'_>) -> CookResult;
 
 #[cfg(test)]

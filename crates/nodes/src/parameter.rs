@@ -16,49 +16,54 @@ fn clamp_finite(v: f32, lo: f32, hi: f32, fallback: f32) -> f32 {
     if v.is_finite() { v.clamp(lo, hi) } else { fallback }
 }
 
-pub fn clamp_params(def: &NodeDefinition, params: &mut BTreeMap<String, Value>) {
-    for p in &def.params {
-        let Some(v) = params.get_mut(p.id) else { continue };
-        if let Value::Enum(i) = v {
-            // (an enum without options has nothing to choose from: its default stands)
-            *i = match (p.options.len().checked_sub(1), &p.default) {
-                (Some(last), _) => (*i).min(u32::try_from(last).unwrap_or(u32::MAX)),
-                (None, Value::Enum(d)) => *d,
+pub fn clamp_params(definition: &NodeDefinition, params: &mut BTreeMap<String, Value>) {
+    for parameter in &definition.params {
+        let Some(value) = params.get_mut(parameter.id) else { continue };
+        if let Value::Enum(index) = value {
+            // Shuffle resolves out-of-range selectors against the connected image kinds
+            if definition.id == "channels_shuffle" && matches!(parameter.id, "red" | "green" | "blue" | "alpha") {
+                continue;
+            }
+
+            // An enum without options keeps its default
+            *index = match (parameter.options.len().checked_sub(1), &parameter.default) {
+                (Some(last), _) => (*index).min(u32::try_from(last).unwrap_or(u32::MAX)),
+                (None, Value::Enum(default)) => *default,
                 (None, _) => 0,
             };
             continue;
         }
 
-        if let Value::Color(c) = v {
-            for x in c {
-                *x = clamp_finite(*x, -HARD_SPAN, 1.0 + HARD_SPAN, 0.0);
+        if let Value::Color(components) = value {
+            for component in components {
+                *component = clamp_finite(*component, -HARD_SPAN, 1.0 + HARD_SPAN, 0.0);
             }
             continue;
         }
 
         // An unconstrained Input Value accepts any number; reject only nonnumeric values
-        let ranged = p.min < p.max;
-        let span = p.max - p.min;
-        let (lo, hi) = if ranged { (p.min - HARD_SPAN * span, p.max + HARD_SPAN * span) } else { (f32::MIN, f32::MAX) };
+        let ranged = parameter.min < parameter.max;
+        let span = parameter.max - parameter.min;
+        let (lo, hi) = if ranged { (parameter.min - HARD_SPAN * span, parameter.max + HARD_SPAN * span) } else { (f32::MIN, f32::MAX) };
 
-        // The default's component `i`, or 0 when the default is a different variant
-        let fallback = |i: usize| match &p.default {
-            Value::Float(d) => [*d].get(i).copied(),
-            Value::Float2(d) => d.get(i).copied(),
-            Value::Float3(d) => d.get(i).copied(),
-            Value::Float4(d) => d.get(i).copied(),
+        // The default's component at `index`, or 0 for a different variant
+        let fallback = |index: usize| match &parameter.default {
+            Value::Float(default) => [*default].get(index).copied(),
+            Value::Float2(default) => default.get(index).copied(),
+            Value::Float3(default) => default.get(index).copied(),
+            Value::Float4(default) => default.get(index).copied(),
             _ => None,
         };
 
-        let clamp_at = |x: &mut f32, i: usize| *x = clamp_finite(*x, lo, hi, fallback(i).unwrap_or(0.0));
-        let clamp_int = |x: &mut i32| *x = (*x as f32).clamp(lo, hi).round() as i32;
-        match v {
-            Value::Float(x) => clamp_at(x, 0),
-            Value::Float2(a) => a.iter_mut().enumerate().for_each(|(i, x)| clamp_at(x, i)),
-            Value::Float3(a) => a.iter_mut().enumerate().for_each(|(i, x)| clamp_at(x, i)),
-            Value::Float4(a) => a.iter_mut().enumerate().for_each(|(i, x)| clamp_at(x, i)),
-            Value::Int(x) if ranged => clamp_int(x),
-            Value::Int2(a) if ranged => a.iter_mut().for_each(clamp_int),
+        let clamp_at = |component: &mut f32, index: usize| *component = clamp_finite(*component, lo, hi, fallback(index).unwrap_or(0.0));
+        let clamp_int = |component: &mut i32| *component = (*component as f32).clamp(lo, hi).round() as i32;
+        match value {
+            Value::Float(component) => clamp_at(component, 0),
+            Value::Float2(components) => components.iter_mut().enumerate().for_each(|(index, component)| clamp_at(component, index)),
+            Value::Float3(components) => components.iter_mut().enumerate().for_each(|(index, component)| clamp_at(component, index)),
+            Value::Float4(components) => components.iter_mut().enumerate().for_each(|(index, component)| clamp_at(component, index)),
+            Value::Int(component) if ranged => clamp_int(component),
+            Value::Int2(components) if ranged => components.iter_mut().for_each(clamp_int),
             _ => {}
         }
     }

@@ -8,7 +8,16 @@ fn cook(graph: PatternGraph) -> crate::CookResult {
 
 fn cook_with_variables(graph: PatternGraph, variables: &BTreeMap<String, Value>) -> crate::CookResult {
     let definition = find("fx_map").unwrap();
-    let parameters = resolve_params(definition, &BTreeMap::from([("pattern".into(), Value::PatternGraph(Box::new(graph)))]));
+
+    // These traversal fixtures measure unattenuated grayscale stamps
+    let parameters = resolve_params(
+        definition,
+        &BTreeMap::from([
+            ("pattern".into(), Value::PatternGraph(Box::new(graph))),
+            ("roughness".into(), Value::Float(0.0)),
+            ("color_mode".into(), Value::Bool(false)),
+        ]),
+    );
     let context = CookContext {
         format: materialcraft_core::OutputFormat::F32,
         w: 16,
@@ -58,12 +67,17 @@ fn iterate_sets_number_and_switch_selects_one_child() {
     function.output = Some(function.add("get_float1", &[], Some(Value::Text("$number".into()))));
     graph.nodes[2].parameters.insert("opacity".into(), Value::Function(Box::new(function)));
     let image = cook(graph.clone()).unwrap().remove(0);
+
     assert!((image.mean()[0] - 3.0).abs() < 1e-6);
+
     let dot = graph.add(PatternNodeKind::Dot).unwrap();
     graph.nodes[1].children[0] = Some(dot);
     graph.nodes[3].children[0] = Some(quadrant);
-    assert_eq!(cook(graph.clone()).unwrap()[0].data, image.data);
+
+    assert_eq!(cook(graph.clone()).unwrap()[0].data(), image.data());
+
     graph.nodes[1].parameters.insert("switch".into(), Value::Bool(true));
+
     assert_eq!(cook(graph).unwrap()[0].mean()[0], 0.0);
 }
 
@@ -87,7 +101,7 @@ fn iterate_preserves_assignments_from_previous_iterations() {
     graph.nodes[1].parameters.insert("opacity".into(), Value::Function(Box::new(increment)));
     let image = cook(graph).unwrap().remove(0);
 
-    assert!(image.data.iter().all(|value| *value == 6.0), "expected 1 + 2 + 3, got {:?}", image.mean());
+    assert!(image.data().iter().all(|value| *value == 6.0), "expected 1 + 2 + 3, got {:?}", image.mean());
 }
 
 #[test]
@@ -173,7 +187,7 @@ fn roughness_attenuates_quadrants_by_depth_and_keeps_background() {
             for blend in 0..=2 {
                 let image = roughness_sample(roughness, depth, blend, color, false).unwrap().remove(0);
                 let pixel = image.get(0, 0, false);
-                for (channel, foreground) in [0.8_f32, 0.4, 0.2, 1.0].into_iter().take(image.kind.channels()).enumerate() {
+                for (channel, foreground) in [0.8_f32, 0.4, 0.2, 1.0].into_iter().take(image.channels()).enumerate() {
                     let value = foreground * 0.5 * weight;
                     let expected = match blend {
                         1 if !color => value.max(0.1),
@@ -214,7 +228,14 @@ fn a_full_nine_level_quadtree_renders_one_pattern_per_pixel() {
     }
     graph.nodes.last_mut().unwrap().parameters.insert("patterntype".into(), Value::Int(2));
     let definition = find("fx_map").unwrap();
-    let parameters = resolve_params(definition, &BTreeMap::from([("pattern".into(), Value::PatternGraph(Box::new(graph)))]));
+    let parameters = resolve_params(
+        definition,
+        &BTreeMap::from([
+            ("pattern".into(), Value::PatternGraph(Box::new(graph))),
+            ("roughness".into(), Value::Float(0.0)),
+            ("color_mode".into(), Value::Bool(false)),
+        ]),
+    );
     let context = CookContext {
         format: materialcraft_core::OutputFormat::F32,
         w: 256,
@@ -229,7 +250,7 @@ fn a_full_nine_level_quadtree_renders_one_pattern_per_pixel() {
 
     let images = (definition.cook)(&context).unwrap();
 
-    assert!(images[0].data.iter().all(|value| (*value - 1.0).abs() < 1e-6));
+    assert!(images[0].data().iter().all(|value| (*value - 1.0).abs() < 1e-6));
 }
 
 fn square(graph: &mut PatternGraph, node: usize) {
@@ -322,7 +343,14 @@ fn a_pixel_on_the_seam_of_two_patterns_is_drawn_once() {
     graph.nodes[1].parameters.insert("patterntype".into(), Value::Int(0));
     square(&mut graph, 2);
     let definition = find("fx_map").unwrap();
-    let parameters = resolve_params(definition, &BTreeMap::from([("pattern".into(), Value::PatternGraph(Box::new(graph)))]));
+    let parameters = resolve_params(
+        definition,
+        &BTreeMap::from([
+            ("pattern".into(), Value::PatternGraph(Box::new(graph))),
+            ("roughness".into(), Value::Float(0.0)),
+            ("color_mode".into(), Value::Bool(false)),
+        ]),
+    );
     let variables = BTreeMap::new();
 
     // Two pixels a side put every pixel center on the corner of four of the sixteen squares

@@ -33,9 +33,19 @@ mod tests {
     fn loading_page_offers_a_reload_when_startup_stalls() {
         let html = include_str!("../index.html");
         let (_, hint) = html.split_once("<p id=\"materialcraft_stalled\">").expect("stalled-startup hint in the loading element");
+
         assert!(hint.contains("failed to") && hint.contains("<a href=\"\">Reload</a>"), "{hint}");
         assert!(html.contains("animation: materialcraft-stalled"), "the hint appears after a delay");
         assert!(html.contains("id=\"materialcraft_canvas\"") && html.contains("data-cargo-profile=\"wasm-release\""));
         assert!(!html.contains("<script"), "trunk injects the generated loader; the page has no script of its own");
+    }
+
+    /// The SBS library's bitmaps would push the wasm past the 25 MiB file cap of Cloudflare Pages,
+    /// so the page ships them beside it, where `web::LIBRARY_URL` downloads them from.
+    #[test]
+    fn loading_page_ships_the_library_resources_beside_the_wasm() {
+        let html = include_str!("../index.html");
+
+        assert!(html.contains(r#"<link data-trunk rel="copy-dir" href="../../assets/sbs/resources" data-target-path="sbs/resources" />"#), "{html}");
     }
 }

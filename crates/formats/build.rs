@@ -1,4 +1,5 @@
-//! Bundle the same SBS library and original resources used by native disk installations.
+//! Bundle the same SBS library and original resources used by native disk installations. The
+//! browser build leaves `resources/` out and lists it for download instead.
 #![forbid(unsafe_code)]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
@@ -55,6 +56,16 @@ fn main() -> Result<()> {
     std::fs::create_dir_all(&compressed)?;
     let mut files = Vec::new();
     scan(&root, Path::new(""), &mut files)?;
+
+    // Keep already-compressed bitmaps out of the size-capped wasm
+    // The browser downloads them from beside the wasm
+    let browser = std::env::var("CARGO_CFG_TARGET_ARCH").is_ok_and(|arch| arch == "wasm32");
+    let (downloaded, files): (Vec<_>, Vec<_>) = files.into_iter().partition(|relative| browser && relative.starts_with("resources"));
+    let mut external = Vec::new();
+    for relative in &downloaded {
+        external.push(relative.to_str().ok_or("non-UTF-8 asset path")?.replace('\\', "/"));
+    }
+    external.sort();
     let mut files: Vec<_> = files.into_iter().map(|relative| (relative.clone(), root.join(relative))).collect();
     files.extend(sbs_font::assets()?);
     files.sort_by_key(|(relative, _)| relative.to_string_lossy().replace('\\', "/"));
@@ -78,6 +89,12 @@ fn main() -> Result<()> {
     }
     assets.push_str("];\n");
     packages.push_str("];\n");
-    std::fs::write(out.join("sbs_assets.rs"), format!("{assets}{packages}"))?;
+    let mut downloads = String::from("const EXTERNAL_ASSETS: &[&str] = &[\n");
+    for name in &external {
+        downloads.push_str(&format!("{name:?},\n"));
+    }
+    downloads.push_str("];\n");
+    std::fs::write(out.join("sbs_assets.rs"), format!("{assets}{packages}{downloads}"))?;
+
     Ok(())
 }

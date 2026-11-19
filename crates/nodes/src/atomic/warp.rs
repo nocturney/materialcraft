@@ -1,7 +1,7 @@
 use super::ATOMIC;
 use crate::ops;
 use crate::{CookContext, CookResult, NodeDefinition, node};
-use materialcraft_image::{Image, Kind};
+use craft_texture::{Image, Kind};
 
 pub(super) fn definition() -> NodeDefinition {
     node("warp", "Warp", ATOMIC)
@@ -15,12 +15,12 @@ pub(super) fn definition() -> NodeDefinition {
 }
 
 fn warp(context: &CookContext) -> CookResult {
-    let img = context.any_or(0, Kind::Gray, [0.0; 4]);
-    let grad = context.gray_or(1, 0.0);
-    let k = context.f("intensity");
-    Ok(vec![Image::generate_uv(context.w, context.h, img.kind, |u, v| {
+    let image = context.any_or(0, Kind::Gray, [0.0; 4]);
+    let gradient = context.gray_or(1, 0.0);
+    let intensity = context.f("intensity");
+    Ok(vec![Image::generate_uv(context.w, context.h, image.kind(), |u, v| {
         let (x, y) = ((u * context.w as f32) as i64, (v * context.h as f32) as i64);
-        let (dx, dy) = ops::slope(&grad, x, y, context.tile);
-        img.sample(u + dx * k, v + dy * k, context.tile)
+        let (dx, dy) = ops::slope(&gradient, x, y, context.tile);
+        image.sample(u + dx * intensity, v + dy * intensity, context.tile)
     })])
 }

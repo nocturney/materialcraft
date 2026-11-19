@@ -12,7 +12,7 @@ use serde_json::Value;
 
 /// Library crates by directory under `crates/` (package `materialcraft-<dir>`) and their layer.
 pub const TABLE: &[(&str, u8)] =
-    &[("core", 0), ("image", 0), ("geom", 0), ("nodes", 1), ("eval", 2), ("formats", 2), ("engine", 3), ("render", 3), ("automation", 4), ("ui-egui", 5)];
+    &[("core", 0), ("geom", 0), ("nodes", 1), ("eval", 2), ("formats", 2), ("engine", 3), ("render", 3), ("automation", 4), ("ui-egui", 5)];
 
 /// Binaries and build tooling on top of every layer: exempt from the rules.
 pub const EXEMPT: &[&str] = &["materialcraft", "materialcraft-cli", "materialcraft-web", "xtask"];
@@ -149,12 +149,13 @@ mod tests {
     fn downward_graph_passes() {
         let g = [
             c("materialcraft-core", &[("serde", Normal, false)]),
-            c("materialcraft-nodes", &[("materialcraft-core", Normal, true), ("materialcraft-image", Normal, true)]),
+            c("materialcraft-nodes", &[("materialcraft-core", Normal, true), ("materialcraft-geom", Normal, true)]),
             c("materialcraft-engine", &[("materialcraft-eval", Normal, true), ("materialcraft-geom", Dev, true)]),
             c("materialcraft-render", &[("materialcraft-nodes", Normal, true), ("wgpu", Normal, false)]),
             c("materialcraft-ui-egui", &[("materialcraft-automation", Normal, true), ("egui", Normal, false), ("wgpu", Normal, false)]),
             c("materialcraft", &[("eframe", Normal, false), ("materialcraft-ui-egui", Normal, true), ("winresource", Build, false)]),
         ];
+
         assert!(check(&g).is_empty(), "{:?}", check(&g));
     }
 

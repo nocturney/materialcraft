@@ -1,5 +1,5 @@
 use super::*;
-use materialcraft_image::{Image, Kind};
+use craft_texture::{Image, Kind};
 
 fn output(side: u32) -> Arc<Vec<NodeOutput>> {
     Arc::new(vec![NodeOutput::Image(Image::filled(side, side, Kind::Gray, [0.5; 4]))])

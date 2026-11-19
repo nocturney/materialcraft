@@ -123,7 +123,7 @@ pub(crate) fn evaluate(
             let index = usize::try_from(setting[0]).map_err(|_| "negative image index")?;
             let pixel = match context.images.get(index).and_then(Option::as_ref) {
                 Some(image) if setting[1] == 0 => {
-                    image.get((position[0] * image.w as f32).floor() as i64, (position[1] * image.h as f32).floor() as i64, context.tile)
+                    image.get((position[0] * image.width() as f32).floor() as i64, (position[1] * image.height() as f32).floor() as i64, context.tile)
                 }
                 Some(image) => image.sample_stored(position[0], position[1], context.tile),
                 None => [0.0; 4],

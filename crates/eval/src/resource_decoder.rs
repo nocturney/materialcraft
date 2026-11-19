@@ -1,4 +1,4 @@
-use materialcraft_image::Image;
+use craft_texture::Image;
 
 /// Decodes an image resource by name within the current package
 pub type ResourceDecoder<'a> = dyn Fn(&str) -> Option<Image> + Sync + 'a;

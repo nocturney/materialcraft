@@ -35,7 +35,7 @@ fn render_region_samples_a_cropped_area() {
     let crop = render([0.25, 0.75, 0.25, 0.75], identity, false).unwrap().remove(0);
 
     assert_eq!(full.mean()[0], 0.25);
-    assert!(crop.data.iter().all(|value| *value == 1.0));
+    assert!(crop.data().iter().all(|value| *value == 1.0));
 }
 
 #[test]
@@ -47,7 +47,7 @@ fn tiling_region_sets_repeat_distance_independently_of_render_region() {
 
     assert_eq!(repeated.get(48, 32, false)[0], 1.0);
     assert_eq!(wider.get(48, 32, false)[0], 0.0);
-    assert_eq!(wider.data, untiled.data);
+    assert_eq!(wider.data(), untiled.data());
     assert_eq!(repeated.mean()[0], 0.25);
     assert_eq!(wider.mean()[0], 0.125);
 }

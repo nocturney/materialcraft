@@ -30,7 +30,9 @@ fn imported_expression_cooks_follows_inputs_and_survives_undo_and_save() {
     s.pkg = imported.pkg;
     s.pkg.graphs[0].format = materialcraft_engine::core::OutputFormat::F32;
     let levels = s.graph().unwrap().nodes[0].id;
-    let uniform = execute(&mut s, "graph.node.add", &json!({"def": "uniform", "params": {"color_mode": false}})).unwrap()["id"].as_u64().unwrap();
+    let uniform = execute(&mut s, "graph.node.add", &json!({"def": "uniform", "params": {"color_mode": false, "color": [0.5, 0.5, 0.5, 1.0]}})).unwrap()["id"]
+        .as_u64()
+        .unwrap();
     execute(&mut s, "graph.connect", &json!({"from": uniform, "to": levels.0})).unwrap();
     let mean = |s: &mut materialcraft_engine::Session| {
         let levels = s.graph().unwrap().nodes.iter().find(|node| node.def == "levels").unwrap().id;
