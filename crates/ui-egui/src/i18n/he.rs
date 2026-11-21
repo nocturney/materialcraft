@@ -1223,6 +1223,7 @@ mod hebrew_preferences_remaining_live_labels_tests {
         let library = include_str!("../preference/library_page.rs");
         let wrapper = include_str!("../preference/mod.rs");
         assert!(wrapper.contains("tr(page.label())"));
+        assert!(wrapper.contains("crate::widgets::name(&row, egui::Role::Tab, tr(page.label()))"), "Preferences AX tab name bypasses locale");
         assert!(wrapper.contains("tr(title)"));
         assert!(wrapper.contains("tr(label)"));
         assert!(wrapper.contains("tr(unit)"));
