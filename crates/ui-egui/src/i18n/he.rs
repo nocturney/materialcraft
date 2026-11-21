@@ -622,6 +622,12 @@ pub const TABLE: &[(&str, &str)] = &[
     ("Common", "משותף"),
     ("Material graph", "גרף חומר"),
     ("Layout", "פריסה"),
+    // FX-Map kind names are dynamic: the graph, picker, properties and AX use kind.label().
+    ("Quadrant", "רביע"),
+    ("Switch", "מתג"),
+    ("Iterate", "חזרה"),
+    ("Dot", "נקודת חיבור"),
+    ("FX-Map graph", "גרף מפת FX"),
 ];
 
 #[cfg(test)]
@@ -1254,5 +1260,33 @@ mod hebrew_preferences_remaining_live_labels_tests {
             assert_eq!(matches.len(), 1, "missing/duplicate Hebrew Preferences key: {key}");
             assert!(matches[0].1.chars().any(|c| ('\u{0590}'..='\u{05ff}').contains(&c)), "not Hebrew: {key}");
         }
+    }
+}
+
+#[cfg(test)]
+mod hebrew_fxmap_kind_and_accessibility_source_tests {
+    use super::TABLE;
+
+    #[test]
+    fn fxmap_kind_labels_and_accessibility_names_are_source_backed_hebrew() {
+        let kinds = include_str!("../../../core/src/pattern_node_kind.rs");
+        let painter = include_str!("../pattern/node_canvas.rs");
+        let canvas = include_str!("../pattern/canvas.rs");
+        let properties = include_str!("../pattern/properties.rs");
+        let picker = include_str!("../graph/add_node_menu.rs");
+        for key in ["Quadrant", "Switch", "Iterate", "Dot"] {
+            assert!(kinds.contains(&format!("{key:?}")), "missing original node kind: {key}");
+            let entries: Vec<_> = TABLE.iter().filter(|(source, _)| *source == key).collect();
+            assert_eq!(entries.len(), 1, "missing or duplicate node label: {key}");
+            assert!(entries[0].1.chars().any(|ch| ('\u{0590}'..='\u{05ff}').contains(&ch)), "untranslated kind: {key}");
+        }
+        assert!(painter.contains("tr(kind.label())"), "node painter must localize its header");
+        assert!(picker.contains("let label = tr(label)"), "node picker must localize dynamic entries");
+        assert!(canvas.contains("egui::Role::Button, tr(node.kind.label())"), "node AX name must localize");
+        assert!(canvas.contains("egui::Role::Canvas, tr(\"FX-Map graph\")"), "graph AX name must localize");
+        assert!(properties.contains("tr(kind.map_or(\"FX-Map\", |kind| kind.label()))"), "Properties title must localize dynamic kind");
+        let graph: Vec<_> = TABLE.iter().filter(|(source, _)| *source == "FX-Map graph").collect();
+        assert_eq!(graph.len(), 1);
+        assert!(graph[0].1.chars().any(|ch| ('\u{0590}'..='\u{05ff}').contains(&ch)));
     }
 }
