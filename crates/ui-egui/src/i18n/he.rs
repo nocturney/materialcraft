@@ -605,6 +605,23 @@ pub const TABLE: &[(&str, &str)] = &[
         "המנוע מושהה: לחידוש הפעולה, בחרו שוב ב׳השהיית המנוע׳ בתפריט כלים (Shift+Escape)",
     ),
     ("Automatic", "אוטומטי"),
+    // Live Native Preferences headings, sidebar tabs and general settings.
+    ("Recent documents", "מסמכים אחרונים"),
+    ("Appearance", "מראה"),
+    ("Views", "תצוגות"),
+    ("Auto backup", "גיבוי אוטומטי"),
+    ("Cooker", "מנוע עיבוד"),
+    ("Recent packages list contains", "רשימת החבילות האחרונות תכיל"),
+    ("packages", "חבילות"),
+    ("Keep up to", "שמירת עד"),
+    ("versions", "גרסאות"),
+    ("General", "כללי"),
+    ("Projects", "פרויקטים"),
+    ("Default 3D view", "תצוגת תלת־ממד כברירת מחדל"),
+    ("Default lighting state", "מצב תאורה כברירת מחדל"),
+    ("Common", "משותף"),
+    ("Material graph", "גרף חומר"),
+    ("Layout", "פריסה"),
 ];
 
 #[cfg(test)]
@@ -1136,7 +1153,6 @@ mod hebrew_native_view3d_feedback_tests {
     }
 }
 
-
 #[cfg(test)]
 mod hebrew_native_view2d_status_source_tests {
     use super::TABLE;
@@ -1149,14 +1165,8 @@ mod hebrew_native_view2d_status_source_tests {
             include_str!("../view2d/histogram_panel.rs"),
             include_str!("../view2d/information_panel.rs"),
         ];
-        const KEYS: &[&str] = &[
-            "The background image could not be shown",
-            "Select output",
-            "Close the Histogram panel",
-            "Used range",
-            "bits",
-            "Close the Information panel",
-        ];
+        const KEYS: &[&str] =
+            &["The background image could not be shown", "Select output", "Close the Histogram panel", "Used range", "bits", "Close the Information panel"];
         assert_eq!(KEYS.len(), 6);
         for key in KEYS {
             assert!(SOURCES.iter().any(|s| s.contains(&format!("tr({key:?})"))), "no source callsite for: {key}");
@@ -1166,7 +1176,6 @@ mod hebrew_native_view2d_status_source_tests {
         }
     }
 }
-
 
 #[cfg(test)]
 mod hebrew_native_save_home_export_source_tests {
@@ -1197,6 +1206,52 @@ mod hebrew_native_save_home_export_source_tests {
             let matches: Vec<_> = TABLE.iter().filter(|(source, _)| source == key).collect();
             assert_eq!(matches.len(), 1, "missing/duplicate Hebrew source label: {key}");
             assert!(matches[0].1.chars().any(|ch| ('\u{0590}'..='\u{05ff}').contains(&ch)), "label is not Hebrew: {key}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod hebrew_preferences_remaining_live_labels_tests {
+    use super::TABLE;
+
+    #[test]
+    fn live_preferences_tabs_headings_and_units_are_hebrew() {
+        let general = include_str!("../preference/general_page.rs");
+        let pages = include_str!("../preference/preferences_page.rs");
+        let graph = include_str!("../preference/graph_page.rs");
+        let projects = include_str!("../preference/projects_page.rs");
+        let library = include_str!("../preference/library_page.rs");
+        let wrapper = include_str!("../preference/mod.rs");
+        assert!(wrapper.contains("tr(page.label())"));
+        assert!(wrapper.contains("tr(title)"));
+        assert!(wrapper.contains("tr(label)"));
+        assert!(wrapper.contains("tr(unit)"));
+        const KEYS: &[&str] = &[
+            "Recent documents",
+            "Appearance",
+            "Views",
+            "Auto backup",
+            "Cooker",
+            "Recent packages list contains",
+            "packages",
+            "Keep up to",
+            "versions",
+            "General",
+            "Projects",
+            "Default 3D view",
+            "Default lighting state",
+            "Common",
+            "Material graph",
+            "Layout",
+        ];
+        for key in KEYS {
+            assert!(
+                [general, pages, graph, projects, library].iter().any(|source| source.contains(&format!("{key:?}"))),
+                "not a source-backed Native Preferences literal: {key}"
+            );
+            let matches: Vec<_> = TABLE.iter().filter(|(source, _)| source == key).collect();
+            assert_eq!(matches.len(), 1, "missing/duplicate Hebrew Preferences key: {key}");
+            assert!(matches[0].1.chars().any(|c| ('\u{0590}'..='\u{05ff}').contains(&c)), "not Hebrew: {key}");
         }
     }
 }
